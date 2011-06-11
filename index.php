@@ -1,9 +1,15 @@
 ﻿<?php
+/*
+$ index -t Node --create authors 
+$ index -t Node --create tags 
+$ index -t Relationship --create tagRel 
+*/
 require('neo4j.blog.php');
 require('blogger.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
-$AuthorsIndex = new IndexService( $graphDb , 'authors');
-$TagIndex = new IndexService( $graphDb , 'tags');
+$AuthorsIndex = new IndexService( $graphDb , 'node', 'authors');
+$TagIndex = new IndexService( $graphDb , 'node', 'tags');
+$TagRelIndex = new IndexService( $graphDb , 'relationship', 'tagRel');
 ?>
 <html>
 <head>
@@ -20,8 +26,6 @@ $TagIndex = new IndexService( $graphDb , 'tags');
 <?php
 $bloggerUrl = "http://www.blogger.com/feeds/";
 
-//$ index -t Relationship --create AuthorTag 
-
 if ($profileID = $_GET['profileID']) {
 	//Retrieving Profile
 	if (@$xmlstr = file_get_contents($bloggerUrl."$profileID/blogs")) {
@@ -37,21 +41,24 @@ if ($profileID = $_GET['profileID']) {
 		$authorNode->blogs = $blogID;
 		$authorNode->save();
 		
+		echo "Author ({$authorNode->getId()}): $authorNode->id ($authorNode->name) with BlogID: ";
+		
+		echo "<ol>";
 		foreach ($xml->entry->category as $cat) {
 			$tagNode = new IndexNode($graphDb, $TagIndex, 'term');
 			$tagNode->term = Blogger::normalize($cat->attributes()->term);
 			$tagNode->save();
-			$relationship = $authorNode->createRelationshipTo($tagNode, 'Tag');
-			$relationship->save();
+			$authorNode->createIndexRelationshipTo($TagRelIndex, $tagNode, 'Tag');
+			echo "<li>{$tagNode->term}</li>";
 		}
-
-		echo "Author ({$authorNode->getId()}): $authorNode->id ($authorNode->name) with BlogID: ";
+		echo "</ol>";
+		
 		//Retrieving BlogID Comments
 		echo "<ul>";
 		foreach ($blogID as $id) {
 			if (@$xmlstr = file_get_contents($bloggerUrl."$id/comments/default")) {
 				echo "<li>$id</li>";
-				$commentID = array();
+				$commentAr = array();
 				$xml = new SimpleXMLElement($xmlstr);
 				foreach ($xml->entry as $entry) {
 					if ($entry->author->uri) {
@@ -59,8 +66,7 @@ if ($profileID = $_GET['profileID']) {
 						$commentNode->id = Blogger::findIdByUri($entry->author->uri);
 						$commentNode->name = Blogger::normalize($entry->author->name);
 						$commentNode->save();
-						$relationship = $commentNode->createRelationshipTo($authorNode, 'Comments');
-						$relationship->save();
+						$commentNode->createRelationshipTo($authorNode, 'Comments');
 						$commentAr[] = $commentNode->id . "(". $commentNode->name. ")" . "(". $commentNode->getId(). ")";
 					}
 				}

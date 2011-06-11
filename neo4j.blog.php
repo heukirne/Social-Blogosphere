@@ -33,6 +33,29 @@ class IndexNode extends Node
 		}
 	}
 	
+	public function createRelationshipTo($node, $type)
+	{
+		if ($this->getId() == $node->getId()) return false;
+		$listRel = $this->getRelationships(Relationship::DIRECTION_BOTH, $type);
+		foreach($listRel as $rel) {
+			if ($rel->getOtherNode($this)->getId() == $node->getId()) return false;
+		}
+		$relationship = parent::createRelationshipTo($node, $type);
+		$relationship->save();
+	}
+	
+	public function createIndexRelationshipTo($index_service, $node, $type)
+	{
+		try {
+			$relationship = $index_service->getNode($this->getId(), $node->getId());
+		}
+		catch (NotFoundException $e) { 
+			$relationship = $this->createRelationshipTo($node, $type);
+			$relationship->save();
+			$index_service->index($relationship, $this->getId(), $node->getId());
+		}
+	}
+	
 }
 
 class Author extends IndexNode

@@ -314,7 +314,7 @@ class Relationship extends PropertyContainer
 	
 	public function getOtherNode($node)
 	{
-		return ($this->_node1->getId()==$node->getId()) ? $this->getStartNode() : $this->getEndNode();
+		return ($this->_node2->getId()==$node->getId()) ? $this->getStartNode() : $this->getEndNode();
 	}
 	
 	public function save()
@@ -728,15 +728,15 @@ class IndexService {
 	var $_data;
 	var $_index;
 	
-	public function __construct( GraphDatabaseService $neo_db, $index = NULL)
+	public function __construct( GraphDatabaseService $neo_db, $type = NULL, $index = NULL)
 	{
 		$this->_neo_db = $neo_db;
-		$this->_index = $index.'/';
+		$this->_index = $type . '/' . $index.'/';
 	}
 	
-	public function index( Node $node, $key, $value ) {
+	public function index( $node, $key, $value ) {
 		
-		$this->_uri = $this->_neo_db->getBaseUri().'index/node/'.$this->_index.$key.'/'.$value;
+		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
 		$this->_data = $node->getUri();
 
 		list($response, $http_code) = HTTPUtil::jsonPostRequest($this->_uri, $this->_data );	
@@ -746,14 +746,14 @@ class IndexService {
 	
 	public function removeIndex(Node $node, $key, $value)
 	{
-		$this->_uri = $this->_neo_db->getBaseUri().'index/node/'.$this->_index.$key.'/'.$value.'/'.$node->getId();
+		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value.'/'.$node->getId();
 		list($response, $http_code) = HTTPUtil::deleteRequest($this->_uri);
 		if ($http_code!=204) throw new HttpException($http_code);
 	}
 
 	public function getNodes($key, $value ) {
 		
-		$this->_uri = $this->_neo_db->getBaseUri().'index/node/'.$this->_index.$key.'/'.$value;
+		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
 		
 		list($response, $http_code) = HTTPUtil::jsonGetRequest($this->_uri);
 		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));
