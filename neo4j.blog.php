@@ -21,6 +21,7 @@ class IndexNode extends Node
 		{
 			try {
 				$node = $this->_idx_srv->getNode($this->_index_property, str_replace(' ','%20',$this->{$this->_index_property}));
+				$this->setProperties(array_merge($node->getProperties(),$this->getProperties()));
 				$this->_id = $node->getId();
 				$this->_is_new = FALSE;
 				$this->_in_index = TRUE;
@@ -50,7 +51,7 @@ class IndexNode extends Node
 			$relationship = $index_service->getNode($this->getId(), $node->getId());
 		}
 		catch (NotFoundException $e) { 
-			$relationship = $this->createRelationshipTo($node, $type);
+			$relationship = parent::createRelationshipTo($node, $type);
 			$relationship->save();
 			$index_service->index($relationship, $this->getId(), $node->getId());
 		}

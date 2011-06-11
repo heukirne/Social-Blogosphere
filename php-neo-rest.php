@@ -753,8 +753,11 @@ class IndexService {
 
 	public function getNodes($key, $value ) {
 		
-		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
-		
+		if ($key)
+			$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
+		else
+			$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.'?query=*:*';
+			
 		list($response, $http_code) = HTTPUtil::jsonGetRequest($this->_uri);
 		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));
 		$nodes = array();
@@ -766,6 +769,10 @@ class IndexService {
 		
 		return $nodes;
 		
+	}
+	
+	public function getAllNodes() {
+		return $this->getNodes(NULL, NULL);
 	}
 	
 	// A hack for now.  The REST API doesn't offer an implementation of 
