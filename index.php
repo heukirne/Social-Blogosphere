@@ -2,6 +2,7 @@
 /*
 $ index -t Node --create authors 
 $ index -t Node --create tags 
+$ index -t Node --create property
 $ index -t Relationship --create tagRel 
 */
 require('neo4j.blog.php');

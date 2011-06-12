@@ -16,6 +16,14 @@ class IndexNode extends Node
 		$this->_in_index = FALSE;
 	}
 	
+	public function import($node) {
+		$this->setProperties(array());
+		$this->setProperties(array_merge($node->getProperties(),$this->getProperties()));
+		$this->_id = $node->getId();
+		$this->_is_new = FALSE;
+		$this->_in_index = TRUE;
+	}
+	
 	public function save() {	
 		if ($this->_is_new)
 		{

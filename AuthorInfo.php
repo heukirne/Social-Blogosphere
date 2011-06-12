@@ -4,7 +4,10 @@ require('neo4j.blog.php');
 require('blogger.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
 $AuthorsIndex = new IndexService( $graphDb , 'node', 'authors');
+$PropIndex = new IndexService( $graphDb , 'node', 'property');
 $getAtuhorInfo = "http://www.blogger.com/profile/";
+
+$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
 
 $allAuthors = $AuthorsIndex->getAllNodes();
 $ctAuthors = count($allAuthors);
@@ -20,14 +23,14 @@ foreach ($allAuthors as $id => $author) {
 			$html = str_replace('strong','b',$html);
 			preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
 			echo "(html)";
-			
+
 			$prop = array();
 			foreach ($listItens[1] as $i => $name) 
 				if (strpos($name,':')) {
 					$name = str_replace(':','',$name);
 					$name = str_replace(' ','_',$name);
 					$name = Blogger::normalize($name);
-					$prop[$name] = $listItens[3][$i]?$listItens[3][$i]:$listItens[4][$i];
+					$prop[$name] = trim($listItens[3][$i])?$listItens[3][$i]:$listItens[4][$i];
 				}
 
 			if (!empty($prop)) {
@@ -36,16 +39,59 @@ foreach ($allAuthors as $id => $author) {
 					$result = array();
 					if (strpos($value,'role')) preg_match("/ind=([^\"]*)/",$value,$result);
 					if (strpos($value,'title')) preg_match("/q=([^\"]*)/",$value,$result);
-					if (strpos($value,'locality')) preg_match("/loc0=([^\&]*)/",$value,$result);
+					if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
+					if (strpos($value,'loc0')) preg_match("/loc0=(\w{2})/",$value,$result);
 					$prop[$i] = Blogger::normalize((empty($result))?$value:$result[1]);
 				}
 				
+				$authorNode = new IndexNode($graphDb, $AuthorsIndex, 'id');
+				$authorNode->import($author);
+				
+				foreach ($prop as $value) {
+					if (in_array($i,$propArray)) {
+						$propNode = new IndexNode($graphDb, $PropIndex, 'info');
+						$propNode->info = Blogger::normalize($value);
+						$propNode->save();
+						$authorNode->createRelationshipTo($propNode, 'Property');
+					}
+				}
+				
 				$author->setProperties(array_merge($author->getProperties(),$prop));
+				$author->update = 1;
+			} 
+			
+			$author->info = 1;
+			$author->save();
+		} else {
+			$erroHandle = error_get_last();
+			if (strpos($erroHandle['message'],'404 Not Found')) {
 				$author->info = 1;
 				$author->save();
-			} 
+			}
 		}
-	} else { echo " jump!"; }
+	} else { 
+
+		if (!$author->update) {
+		
+			$authorNode = new IndexNode($graphDb, $AuthorsIndex, 'id');
+			$authorNode->import($author);
+			
+			foreach ($authorNode->getProperties() as $i => $value)
+				if (in_array($i,$propArray)) {
+					$propNode = new IndexNode($graphDb, $PropIndex, 'info');
+					$propNode->info = Blogger::normalize($value);
+					$propNode->save();
+					$authorNode->createRelationshipTo($propNode, 'Property');
+				}
+				
+			$authorNode->update = 1;
+			$authorNode->save();
+				
+			echo " update!"; 
+		
+		} else { echo "jump!"; }
+	
+	}
 	echo "\n";
 	
 }
