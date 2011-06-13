@@ -7,7 +7,7 @@ $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
 $AuthorsIndex = new IndexService( $graphDb , 'node', 'authors');
 
 	$ct = 1;
-	$allAuthors = $AuthorsIndex->getAllNodes();
+	$allAuthors = $AuthorsIndex->getNodesByQuery('id','1*');
 	$ctAuthors = count($allAuthors);
 	echo "Iteration over ".$ctAuthors." nodes:\n";
 	foreach ($allAuthors as $id => $author) {

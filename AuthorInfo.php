@@ -9,21 +9,21 @@ $getAtuhorInfo = "http://www.blogger.com/profile/";
 
 $propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
 
-$allAuthors = $AuthorsIndex->getAllNodes();
+$allAuthors = $AuthorsIndex->getNodesByQuery('id','1*');
 $ctAuthors = count($allAuthors);
 echo "Iteration over ".$ctAuthors." nodes:\n";
 
 foreach ($allAuthors as $id => $author) {
 
 	$html="";
-	echo $id."/".$ctAuthors."-".$author->id."(".$author->getId().")";
 	if (!$author->info)
 	{
+		echo $id."/".$ctAuthors."-".$author->id."(".$author->getId().")";
 		if ($html = file_get_contents($getAtuhorInfo.$author->id)) {
 			$html = str_replace('strong','b',$html);
 			preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
 			echo "(html)";
-
+			//print_r($listItens);
 			$prop = array();
 			foreach ($listItens[1] as $i => $name) 
 				if (strpos($name,':')) {
@@ -32,17 +32,20 @@ foreach ($allAuthors as $id => $author) {
 					$name = Blogger::normalize($name);
 					$prop[$name] = trim($listItens[3][$i])?$listItens[3][$i]:$listItens[4][$i];
 				}
-
+			//print_r($prop);
 			if (!empty($prop)) {
 				echo "(prop)";
 				foreach ($prop as $i => $value) {
 					$result = array();
 					if (strpos($value,'role')) preg_match("/ind=([^\"]*)/",$value,$result);
 					if (strpos($value,'title')) preg_match("/q=([^\"]*)/",$value,$result);
+					if (strpos($value,'loc1')) preg_match("/loc1=(\w*)/",$value,$result);
 					if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
 					if (strpos($value,'loc0')) preg_match("/loc0=(\w{2})/",$value,$result);
 					$prop[$i] = Blogger::normalize((empty($result))?$value:$result[1]);
 				}
+				//print_r($prop);
+				//die();
 				
 				$authorNode = new IndexNode($graphDb, $AuthorsIndex, 'id');
 				$authorNode->import($author);
@@ -62,6 +65,8 @@ foreach ($allAuthors as $id => $author) {
 			
 			$author->info = 1;
 			$author->save();
+			echo "sleep;"; sleep(10);
+			echo "\n";
 		} else {
 			$erroHandle = error_get_last();
 			if (strpos($erroHandle['message'],'404 Not Found')) {
@@ -77,7 +82,7 @@ foreach ($allAuthors as $id => $author) {
 			$authorNode->import($author);
 			
 			foreach ($authorNode->getProperties() as $i => $value)
-				if (in_array($i,$propArray)) {
+				if (in_array($i,$propArray) && !empty($value)) {
 					$propNode = new IndexNode($graphDb, $PropIndex, 'info');
 					$propNode->info = Blogger::normalize($value);
 					$propNode->save();
@@ -86,12 +91,10 @@ foreach ($allAuthors as $id => $author) {
 				
 			$authorNode->update = 1;
 			$authorNode->save();
-				
-			echo " update!"; 
 		
-		} else { echo "jump!"; }
+		}
 	
 	}
-	echo "\n";
+	
 	
 }

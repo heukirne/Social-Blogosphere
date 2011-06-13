@@ -1,4 +1,15 @@
 <?php
+/*
+Gremlin Syntax
+
+g.getIndex('tags',Vertex.class).get('term','psdb');
+g.getIndex('tags',Vertex.class).get('term',Neo4jTokens.QUERY_HEADER+'psd*');
+g.getIndex('tags',Vertex.class).get('term',Neo4jTokens.QUERY_HEADER+'psd*')._().bothE{it.label=="Tag"}.count();
+g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._().bothE{it.label=="Comments"}.count();
+g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*').count();
+g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._().blogs.count();
+g.getIndex('property',Vertex.class).get('info','BR')._().bothE.count();
+*/
 require('neo4j.blog.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
 $AuthorsIndex = new IndexService( $graphDb , 'node', 'authors');

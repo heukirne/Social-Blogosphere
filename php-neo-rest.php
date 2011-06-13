@@ -752,11 +752,7 @@ class IndexService {
 	}
 
 	public function getNodes($key, $value ) {
-		
-		if ($key)
-			$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
-		else
-			$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.'?query=*:*';
+		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index.$key.'/'.$value;
 			
 		list($response, $http_code) = HTTPUtil::jsonGetRequest($this->_uri);
 		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));
@@ -771,8 +767,19 @@ class IndexService {
 		
 	}
 	
-	public function getAllNodes() {
-		return $this->getNodes(NULL, NULL);
+	public function getNodesByQuery($key, $query) {
+		$this->_uri = $this->_neo_db->getBaseUri().'index/'.$this->_index."?query=$key:$query";
+		
+		list($response, $http_code) = HTTPUtil::jsonGetRequest($this->_uri);
+		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));
+		$nodes = array();
+		foreach($response as $nodeData) {
+			$nodes[] = Node::inflateFromResponse( $this->_neo_db, $nodeData );
+		}
+		
+		if (empty($nodes)) throw new NotFoundException();
+		
+		return $nodes;
 	}
 	
 	// A hack for now.  The REST API doesn't offer an implementation of 
