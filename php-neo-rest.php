@@ -68,6 +68,17 @@ class GraphDatabaseService
 		return $this->base_uri;
 	}
 	
+	public function gremlinExec($script)
+	{
+		$gremlinUri = 'ext/GremlinPlugin/graphdb/execute_script';
+		$data = array('script'=>$script);
+	
+		list($response, $http_code) = HTTPUtil::jsonPostRequest($this->base_uri.$gremlinUri, $data);
+		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));	
+		
+		return $response;
+	}
+	
 }
 
 

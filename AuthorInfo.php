@@ -51,7 +51,7 @@ foreach ($allAuthors as $id => $author) {
 				$authorNode->import($author);
 				
 				foreach ($prop as $value) {
-					if (in_array($i,$propArray)) {
+					if (in_array($i,$propArray) && !empty($value)) {
 						$propNode = new IndexNode($graphDb, $PropIndex, 'info');
 						$propNode->info = Blogger::normalize($value);
 						$propNode->save();
