@@ -15,5 +15,5 @@ $numTags = $graphDb->gremlinExec("g.getIndex('tags',Vertex.class).get('term',Neo
 echo "Autores: ".$numAuthors."\n";
 echo "Autores BR: ".$numBrAuthors."\n";
 echo "Blogs?: ".$numBlogs."\n";
-echo "Comentarios: ".$numComments."\n";
+echo "Comentarios: ".($numComments/2)."\n";
 echo "Tags: ".$numTags."\n";
