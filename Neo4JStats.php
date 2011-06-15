@@ -2,6 +2,11 @@
 /*
 Installing Gremlin Plugin
 http://romikoderbynew.wordpress.com/2011/06/11/neo4j-and-gremlin-plugin-install-guide/
+
+Iterate over Gremlin
+g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*').count();
+g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')[0]._();
+$nodes = $graphDb->gremlinNodes("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')[0]._();");
 */
 require('neo4j.blog.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');

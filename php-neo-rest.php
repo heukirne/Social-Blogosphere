@@ -79,6 +79,24 @@ class GraphDatabaseService
 		return $response;
 	}
 	
+	public function gremlinNodes($script)
+	{
+		$gremlinUri = 'ext/GremlinPlugin/graphdb/execute_script';
+		$data = array('script'=>$script);
+	
+		list($response, $http_code) = HTTPUtil::jsonPostRequest($this->base_uri.$gremlinUri, $data);
+		if ($http_code!=200) throw new HttpException("http code: " . $http_code . ", response: " . print_r($response, true));	
+		
+		$nodes = array();
+		foreach($response as $nodeData) {
+			$nodes[] = Node::inflateFromResponse( $this, $nodeData );
+		}
+		
+		if (empty($nodes)) throw new NotFoundException();
+		
+		return $nodes;
+	}
+	
 }
 
 
