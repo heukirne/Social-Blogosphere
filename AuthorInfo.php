@@ -69,7 +69,7 @@ for ($iA=1;$iA<$ctAuthors;$iA++) {
 			echo "\n";
 		} else {
 			$erroHandle = error_get_last();
-			if (strpos($erroHandle['message'],'404 Not Found')) {
+			if (strpos($erroHandle['message'],'404 Not Found') || strpos($erroHandle['message'],'500 Internal Server')) {
 				$author->info = 1;
 				$author->save();
 			}

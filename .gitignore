@@ -2,3 +2,5 @@
 /demoIndex.php
 *.bat
 *.graphml
+/var
+*.class
