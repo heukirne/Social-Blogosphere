@@ -7,6 +7,8 @@ Iterate over Gremlin
 g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*').count();
 g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')[0]._();
 $nodes = $graphDb->gremlinNodes("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')[0]._();");
+
+numblogs: g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'1234*')._(){it.blogs}.blogs.toList().toString().size();
 */
 require('neo4j.blog.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');

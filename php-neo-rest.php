@@ -97,6 +97,14 @@ class GraphDatabaseService
 		return $nodes;
 	}
 	
+	public function gremlinNode($script) {
+		
+		$nodes = $this->gremlinNodes($script);
+				
+		return $nodes[0];
+		
+	}
+	
 }
 
 

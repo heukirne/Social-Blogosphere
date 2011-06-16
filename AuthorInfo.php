@@ -9,16 +9,16 @@ $getAtuhorInfo = "http://www.blogger.com/profile/";
 
 $propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
 
-$allAuthors = $AuthorsIndex->getNodesByQuery('id','1*');
-$ctAuthors = count($allAuthors);
+$ctAuthors = $graphDb->gremlinExec("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.info!=1}.count();");
 echo "Iteration over ".$ctAuthors." nodes:\n";
 
-foreach ($allAuthors as $id => $author) {
+for ($iA=1;$iA<$ctAuthors;$iA++) {
 
+	$author = $graphDb->gremlinNode("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.info!=1}[0];");
 	$html="";
 	if (!$author->info)
 	{
-		echo $id."/".$ctAuthors."-".$author->id."(".$author->getId().")";
+		echo $iA."/".$ctAuthors."-".$author->id."(".$author->getId().")";
 		if ($html = file_get_contents($getAtuhorInfo.$author->id)) {
 			$html = str_replace('strong','b',$html);
 			preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
@@ -51,7 +51,7 @@ foreach ($allAuthors as $id => $author) {
 				$authorNode->import($author);
 				
 				foreach ($prop as $value) {
-					if (in_array($i,$propArray) && !empty($value)) {
+					if (in_array($prop,$propArray) && !empty($value)) {
 						$propNode = new IndexNode($graphDb, $PropIndex, 'info');
 						$propNode->info = Blogger::normalize($value);
 						$propNode->save();
