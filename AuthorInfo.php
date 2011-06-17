@@ -22,6 +22,11 @@ for ($iA=1;$iA<$ctAuthors;$iA++) {
 		if ($html = file_get_contents($getAtuhorInfo.$author->id)) {
 			$html = str_replace('strong','b',$html);
 			preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
+			preg_match_all("/href=\"([^\"]+)\"[^\"]+\"contributor-to/", $html, $blogs); 
+		
+			if (empty($author->blogs) && !empty($blogs[1]))
+					$author->blogs = $blogs[1];
+			
 			echo "(html)";
 			//print_r($listItens);
 			$prop = array();
