@@ -5,14 +5,20 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.index.Index;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
+import org.neo4j.kernel.*;
 
-//import com.tinkerpop.blueprints.pgm.impls.neo4j.*;
+//import java.util.Map;
+//import net.sf.json.*;
 
 import com.google.gdata.client.Query;
 import com.google.gdata.client.blogger.BloggerService;
 import com.google.gdata.data.*;
 import com.google.gdata.util.ServiceException;
+
+import javax.ws.rs.core.MediaType;
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.WebResource;
 
 import java.util.*;
 import java.net.*;
@@ -24,27 +30,54 @@ import java.text.Normalizer;
  */
 public class AuthorIterate {
  
-    private static final String DB_PATH = "var/base";
+	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
+    private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
+	private static final String DB_BASE = "var/base";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
 	private static final String TAG_KEY = "term";
 	private static final String POST_KEY = "post";
 	private static final String BLOG_KEY = "blog";
     private static GraphDatabaseService graphDb;
+	private static GraphDatabaseService readonlyDb;
     private static Index<Node> userIndex; 
 	private static Index<Node> tagIndex; 
 	private static Index<Node> postIndex;
 	private static Index<Node> blogIndex;
+	private static Index<Node> propertyIndex;
 	private static Index<Relationship> commentIndex; 
  
      private static enum RelTypes implements RelationshipType
     {
         Comments,
-        Tags
+        Tags,
+		Property
     }
- 
+
     public static void main(String[] args) throws Exception {
-        graphDb = new EmbeddedGraphDatabase( DB_PATH );
+	
+		readonlyDb = new EmbeddedReadOnlyGraphDatabase( DB_BLOG );
+		
+		propertyIndex = readonlyDb.index().forNodes( "property" );
+		
+		Integer count = 0;
+		for ( Relationship relationship : propertyIndex.query("info","BR").getSingle().getRelationships( RelTypes.Property, Direction.INCOMING ) ) {
+			if (relationship.getStartNode().hasProperty("blogs")) {
+				count++;
+				ArrayList<String> blogs = new ArrayList<String>(Arrays.asList((String[]) relationship.getStartNode().getProperty("blogs")));
+				for (String blog : blogs)
+					System.out.println(blog.replace("http:","").replace("/",""));
+				
+				if (count>3) break;
+			}
+		}
+	
+		readonlyDb.shutdown();
+	
+		System.out.println("quit!");
+		System.exit(0);
+	
+		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
 		tagIndex = graphDb.index().forNodes( "tags" );
 		postIndex = graphDb.index().forNodes( "posts" );
@@ -120,13 +153,11 @@ public class AuthorIterate {
 				
 				Integer count = 0;
 				for (Entry entry : resultFeed.getEntries()) {
-					String linkID = entry.getLinks().get(2).getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");
+					String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");
 					if (postIndex.get( POST_KEY, linkID).size()==0) {
 						count++;
 						System.out.print("," + count);
 						ArrayList<Node> ArrNodes = getComments(linkID);
-						if (ArrNodes.size()==0)
-							throw new MalformedURLException();
 						for ( Category category : entry.getCategories() ) {
 							String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
 							text = text.replaceAll("[^\\p{ASCII}]", "");
@@ -155,10 +186,10 @@ public class AuthorIterate {
 			} finally {
 				tx.finish();
 			}
-	}	
+	}
 	
 	public static ArrayList<Node> getComments(final String postUri) throws ServiceException, IOException {
-			System.out.print(" " + postUri + ",");
+			//System.out.print(" " + postUri + ",");
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			ArrayList<Node> ArrNodes = new ArrayList<Node>();
 			Transaction tx = graphDb.beginTx();
@@ -260,6 +291,24 @@ public class AuthorIterate {
 			}
 		}
     }	
+	
+    private static void JsonURL(String url) throws Exception
+    {
+		URLConnection urlConnection = new URL(url).openConnection();
+		urlConnection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+		urlConnection.setRequestProperty("Accept", "application/json");
+
+		BufferedReader in = new BufferedReader(
+                                new InputStreamReader(
+                                urlConnection.getInputStream()));
+
+		String inputLine;
+
+		while ((inputLine = in.readLine()) != null)
+			System.out.println(inputLine);
+
+		in.close();	
+	}
 	
     private static void shutdown()
     {
