@@ -1,24 +1,13 @@
-import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.index.Index;
+import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.index.*;
 import org.neo4j.kernel.*;
 
-//import java.util.Map;
-//import net.sf.json.*;
+import com.mongodb.*;
 
 import com.google.gdata.client.Query;
 import com.google.gdata.client.blogger.BloggerService;
 import com.google.gdata.data.*;
 import com.google.gdata.util.ServiceException;
-
-import javax.ws.rs.core.MediaType;
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.WebResource;
 
 import java.util.*;
 import java.net.*;
@@ -55,9 +44,27 @@ public class AuthorIterate {
     }
 
     public static void main(String[] args) throws Exception {
+
+		/*
+		Mongo m = new Mongo( "localhost" , 27017 );
+		DB db = m.getDB( "blogdb" );
+		DBCollection coll = db.getCollection("posts");
+		*/
+		/*
+		BasicDBObject doc = new BasicDBObject();
+        doc.put("name", "MongoDB");
+        doc.put("type", "database");
+        doc.put("count", 1);
+
+        BasicDBObject info = new BasicDBObject();
+        info.put("x", 203);
+        info.put("y", 102);
+
+        doc.put("info", info);
+        coll.insert(doc);
+		*/
 	
 		readonlyDb = new EmbeddedReadOnlyGraphDatabase( DB_BLOG );
-		
 		propertyIndex = readonlyDb.index().forNodes( "property" );
 		
 		Integer count = 0;

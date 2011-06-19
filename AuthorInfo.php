@@ -5,21 +5,21 @@ require('blogger.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
 $AuthorsIndex = new IndexService( $graphDb , 'node', 'authors');
 $PropIndex = new IndexService( $graphDb , 'node', 'property');
-$getAtuhorInfo = "http://www.blogger.com/profile/";
+$getAuthorInfo = "http://www.blogger.com/profile/";
 
-$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
+$propArray = array('Atividade','Signo_astrologico','Profissao','Sexo');
 
-$ctAuthors = $graphDb->gremlinExec("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.info!=1}.count();");
+$ctAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV{it.blogs==null}._().count();");
 echo "Iteration over ".$ctAuthors." nodes:\n";
 
 for ($iA=1;$iA<$ctAuthors;$iA++) {
 
-	$author = $graphDb->gremlinNode("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.info!=1}[0];");
+	$author = $graphDb->gremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV{it.blogs==null}._()[0];");
 	$html="";
-	if (!$author->info)
+	if (true)
 	{
 		echo $iA."/".$ctAuthors."-".$author->id."(".$author->getId().")";
-		if ($html = file_get_contents($getAtuhorInfo.$author->id)) {
+		if ($html = file_get_contents($getAuthorInfo.$author->id)) {
 			$html = str_replace('strong','b',$html);
 			preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
 			preg_match_all("/href=\"([^\"]+)\"[^\"]+\"contributor-to/", $html, $blogs); 

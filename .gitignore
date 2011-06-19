@@ -4,3 +4,4 @@
 *.graphml
 /var
 *.class
+/lib
