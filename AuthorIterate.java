@@ -80,6 +80,7 @@ public class AuthorIterate {
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		collPosts = mongoDb.getCollection("posts");
+		collPosts.ensureIndex("linkID");
 		
 		getBlogs();
 		
@@ -104,14 +105,13 @@ public class AuthorIterate {
 			try {
 				String blogID = blogs.getString(i).replace("http:","").replace("/","");
 				if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
-					System.out.println(blogID);
-					/*
+					//System.out.println(blogID);
 					if (getPosts(blogID)) {
 						Node blog = graphDb.createNode();
 						blog.setProperty( BLOG_KEY, blogID);
 						blogIndex.add(blog, BLOG_KEY, blogID);
 					} 
-					*/
+					break;
 				}
 				tx.success();
 			} finally {
@@ -150,10 +150,12 @@ public class AuthorIterate {
 				
 				Integer count = 0;
 				for (Entry entry : resultFeed.getEntries()) {
-					String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");
-					if (postIndex.get( POST_KEY, linkID).size()==0) {
-						count++;
-						System.out.print("," + count);
+					String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+					if (entry.getAuthors().get(0).getUri()!=null && postIndex.get( POST_KEY, linkID).size()==0) {
+					
+						setMongoPost(entry);
+						count++; System.out.print("," + count);	
+						
 						ArrayList<Node> ArrNodes = getComments(linkID);
 						for ( Category category : entry.getCategories() ) {
 							String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
@@ -223,6 +225,34 @@ public class AuthorIterate {
 				tx.finish();
 				return ArrNodes;
 			}
+	}
+	
+	private static void setMongoPost(Entry entry) {
+		
+		BasicDBObject doc = new BasicDBObject();
+
+		String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+		doc.put("linkID", linkID);
+		
+		if (collPosts.find(doc).count()==0) {
+			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+			doc.put("authorID", authorID);
+			
+			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
+			content = content.replaceAll("[^\\p{ASCII}]", "");
+			doc.put("content", content);
+
+			ArrayList tags = new ArrayList();
+			for ( Category category : entry.getCategories() ) {
+				String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
+				text = text.replaceAll("[^\\p{ASCII}]", "");
+				tags.add(text);
+			}
+			doc.put("tags", tags);
+
+			collPosts.insert(doc);
+		}
+		
 	}
 	
     private static Node createAuthorNode( final String profileID )
