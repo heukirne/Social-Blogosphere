@@ -9,12 +9,12 @@ $getAuthorInfo = "http://www.blogger.com/profile/";
 
 $propArray = array('Atividade','Signo_astrologico','Profissao','Sexo');
 
-$ctAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV{it.blogs==null}._().count();");
+$ctAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs==null}._(){it.blogsSet==null}.count();");
 echo "Iteration over ".$ctAuthors." nodes:\n";
 
 for ($iA=1;$iA<$ctAuthors;$iA++) {
 
-	$author = $graphDb->gremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV{it.blogs==null}._()[0];");
+	$author = $graphDb->gremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs==null}._(){it.blogsSet==null}[0];");
 	$html="";
 	if (true)
 	{
@@ -26,6 +26,8 @@ for ($iA=1;$iA<$ctAuthors;$iA++) {
 		
 			if (empty($author->blogs) && !empty($blogs[1]))
 					$author->blogs = $blogs[1];
+			
+			$author->blogsSet = 1;
 			
 			echo "(html)";
 			//print_r($listItens);
@@ -75,13 +77,13 @@ for ($iA=1;$iA<$ctAuthors;$iA++) {
 		} else {
 			$erroHandle = error_get_last();
 			if (strpos($erroHandle['message'],'404 Not Found') || strpos($erroHandle['message'],'500 Internal Server')) {
-				$author->info = 1;
+				$author->blogsSet = 1;
 				$author->save();
 			}
 		}
 	} else { 
 
-		if (!$author->update) {
+		if (false && !$author->update) {
 		
 			$authorNode = new IndexNode($graphDb, $AuthorsIndex, 'id');
 			$authorNode->import($author);

@@ -9,6 +9,9 @@ import com.google.gdata.client.blogger.BloggerService;
 import com.google.gdata.data.*;
 import com.google.gdata.util.ServiceException;
 
+import net.sf.json.JSONObject;
+import net.sf.json.JSONArray;
+
 import java.util.*;
 import java.net.*;
 import java.io.*;
@@ -36,6 +39,10 @@ public class AuthorIterate {
 	private static Index<Node> propertyIndex;
 	private static Index<Relationship> commentIndex; 
  
+	private static Mongo mongoConn;
+	private static DB mongoDb;
+	private static DBCollection collPosts;
+ 
      private static enum RelTypes implements RelationshipType
     {
         Comments,
@@ -43,13 +50,8 @@ public class AuthorIterate {
 		Property
     }
 
-    public static void main(String[] args) throws Exception {
-
-		/*
-		Mongo m = new Mongo( "localhost" , 27017 );
-		DB db = m.getDB( "blogdb" );
-		DBCollection coll = db.getCollection("posts");
-		*/
+    public static void main(String[] args) throws Exception {		
+	
 		/*
 		BasicDBObject doc = new BasicDBObject();
         doc.put("name", "MongoDB");
@@ -62,27 +64,10 @@ public class AuthorIterate {
 
         doc.put("info", info);
         coll.insert(doc);
-		*/
-	
-		readonlyDb = new EmbeddedReadOnlyGraphDatabase( DB_BLOG );
-		propertyIndex = readonlyDb.index().forNodes( "property" );
 		
-		Integer count = 0;
-		for ( Relationship relationship : propertyIndex.query("info","BR").getSingle().getRelationships( RelTypes.Property, Direction.INCOMING ) ) {
-			if (relationship.getStartNode().hasProperty("blogs")) {
-				count++;
-				ArrayList<String> blogs = new ArrayList<String>(Arrays.asList((String[]) relationship.getStartNode().getProperty("blogs")));
-				for (String blog : blogs)
-					System.out.println(blog.replace("http:","").replace("/",""));
-				
-				if (count>3) break;
-			}
-		}
-	
-		readonlyDb.shutdown();
-	
 		System.out.println("quit!");
 		System.exit(0);
+		*/
 	
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
@@ -92,47 +77,11 @@ public class AuthorIterate {
 		commentIndex = graphDb.index().forRelationships( "comments" );
         registerShutdownHook();
 
-		ArrayList<String> ArrBlogs = new ArrayList<String>();
-		ArrBlogs.add("23198109");
-		ArrBlogs.add("blogentrelinhas.blogspot.com");
-		ArrBlogs.add("brasilempreende.blogspot.com");
-		ArrBlogs.add("fetexas.blogspot.com");
-		ArrBlogs.add("www.imprensabrasileira.com.br");
-		ArrBlogs.add("premiobeijaflor.blogspot.com");
-		ArrBlogs.add("imprensadobrasil.blogspot.com");
-		ArrBlogs.add("tvfuzarca.blogspot.com");
-		ArrBlogs.add("brasileducom.blogspot.com");
-		ArrBlogs.add("capitao-obvio.blogspot.com");
-		ArrBlogs.add("carrosjuizdefora.blogspot.com");
-		ArrBlogs.add("blogdoparrini.blogspot.com");
-		ArrBlogs.add("publicidadesportiva.blogspot.com");
-		ArrBlogs.add("vocesabendomais.blogspot.com");
-		ArrBlogs.add("caranovanocongresso.blogspot.com");
-		ArrBlogs.add("bloggersemacao.blogspot.com");
-		ArrBlogs.add("pelofimdosenado.blogspot.com");
-		ArrBlogs.add("fuscabrasil.blogspot.com");
-		ArrBlogs.add("verme-lho.blogspot.com");
-		ArrBlogs.add("estrelapresidente.blogspot.com");
-		ArrBlogs.add("brasildefacto.blogspot.com");
-		ArrBlogs.add("carlosferreirajf.blogspot.com");
-
+		mongoConn = new Mongo( "localhost" , 27017 );
+		mongoDb = mongoConn.getDB( "blogdb" );
+		collPosts = mongoDb.getCollection("posts");
 		
-		
-		for (String blogID : ArrBlogs) {
-			Transaction tx = graphDb.beginTx();
-			try {
-				if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
-					if (getPosts(blogID)) {
-						Node blog = graphDb.createNode();
-						blog.setProperty( BLOG_KEY, blogID);
-						blogIndex.add(blog, BLOG_KEY, blogID);
-					} 
-				}
-				tx.success();
-			} finally {
-				tx.finish();
-			}
-		}
+		getBlogs();
 		
 		System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
 		System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
@@ -144,10 +93,51 @@ public class AuthorIterate {
         shutdown();
     }
 
+	public static void getBlogs() throws Exception {
+
+		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()[0];");
+		JSONArray blogs = jsonObject.getJSONObject("data").getJSONArray("blogs");
+		
+		for(int i = 0 ; i < blogs.size(); i++)
+		{
+			Transaction tx = graphDb.beginTx();
+			try {
+				String blogID = blogs.getString(i).replace("http:","").replace("/","");
+				if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
+					System.out.println(blogID);
+					/*
+					if (getPosts(blogID)) {
+						Node blog = graphDb.createNode();
+						blog.setProperty( BLOG_KEY, blogID);
+						blogIndex.add(blog, BLOG_KEY, blogID);
+					} 
+					*/
+				}
+				tx.success();
+			} finally {
+				tx.finish();
+			}
+		}
+		
+		/* Get Blogs from EmbeddedReadOnlyGraphDatabase
+		String nodeStr = jsonObject.getString("self").replace(SERVER_ROOT_URI+"node/","");
+		int nodeId =  Integer.parseInt(nodeStr);		
+		readonlyDb = new EmbeddedReadOnlyGraphDatabase( DB_BLOG );
+		Node node = readonlyDb.getNodeById(nodeId);
+		ArrayList<String> blogsAr = new ArrayList<String>(Arrays.asList((String[]) node.getProperty("blogs")));
+		for (String blog : blogsAr)
+			System.out.println(blog.replace("http:","").replace("/",""));
+		readonlyDb.shutdown();
+		*/
+		
+	}
+	
 	public static Boolean getPosts(final String blogUri) throws ServiceException, IOException {
-			System.out.print("Retriving Posts from:" + blogUri);
+			
+			System.out.print("Retriving Posts from:" + blogUri);			
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			Transaction tx = graphDb.beginTx();
+			
 			try {
 				URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogUri + "/posts/default");
 				if (!blogUri.matches("\\d+")) {
@@ -299,27 +289,40 @@ public class AuthorIterate {
 		}
     }	
 	
-    private static void JsonURL(String url) throws Exception
+    private static JSONObject GremlinNode(String script) throws Exception
     {
-		URLConnection urlConnection = new URL(url).openConnection();
-		urlConnection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+		String GremlinURI = SERVER_ROOT_URI + "ext/GremlinPlugin/graphdb/execute_script";
+
+		// Send data
+		URLConnection urlConnection = new URL(GremlinURI).openConnection();
+		
+		urlConnection.setDoOutput(true);
+		urlConnection.setDoInput(true);
+		//urlConnection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
 		urlConnection.setRequestProperty("Accept", "application/json");
+		
+		OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream());
+		wr.write(URLEncoder.encode("script", "UTF-8") + "=" + URLEncoder.encode(script, "UTF-8"));
+		wr.flush();
 
-		BufferedReader in = new BufferedReader(
-                                new InputStreamReader(
-                                urlConnection.getInputStream()));
-
-		String inputLine;
-
-		while ((inputLine = in.readLine()) != null)
-			System.out.println(inputLine);
-
-		in.close();	
+		// Get the response
+		BufferedReader rd = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+		String line;
+		String json = "";
+		while ((line = rd.readLine()) != null) {
+			json += line;
+		}
+		wr.close();
+		rd.close();
+	
+		json = json.replace("[ {","{").replace("} ]","}");
+		return JSONObject.fromObject(json);
 	}
 	
     private static void shutdown()
     {
         graphDb.shutdown();
+		mongoConn.close();
     }
 	
     private static void registerShutdownHook()
