@@ -38,7 +38,7 @@ public class AuthorIterate {
 	private static Index<Node> blogIndex;
 	private static Index<Node> propertyIndex;
 	private static Index<Relationship> commentIndex; 
- 
+	private static Node dummyNode;
 	private static Mongo mongoConn;
 	private static DB mongoDb;
 	private static DBCollection collPosts;
@@ -52,35 +52,22 @@ public class AuthorIterate {
 
     public static void main(String[] args) throws Exception {		
 	
-		/*
-		BasicDBObject doc = new BasicDBObject();
-        doc.put("name", "MongoDB");
-        doc.put("type", "database");
-        doc.put("count", 1);
-
-        BasicDBObject info = new BasicDBObject();
-        info.put("x", 203);
-        info.put("y", 102);
-
-        doc.put("info", info);
-        coll.insert(doc);
-		
-		System.out.println("quit!");
-		System.exit(0);
-		*/
-	
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
 		tagIndex = graphDb.index().forNodes( "tags" );
 		postIndex = graphDb.index().forNodes( "posts" );
 		blogIndex = graphDb.index().forNodes( "blogs" );
 		commentIndex = graphDb.index().forRelationships( "comments" );
-        registerShutdownHook();
+		registerShutdownHook();
+
 
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		collPosts = mongoDb.getCollection("posts");
-		collPosts.ensureIndex("linkID");
+		collPosts.ensureIndex("linkID");		
+		
+		Transaction tx = graphDb.beginTx();
+		dummyNode = graphDb.createNode();
 		
 		getBlogs();
 		
@@ -90,13 +77,16 @@ public class AuthorIterate {
 		System.out.println("Numbers of Posts:" + postIndex.query( POST_KEY , "*" ).size());
 		System.out.println("Numbers of Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
 
+		tx.success();
+		tx.finish();
+		
         System.out.println( "Shutting down database ..." );
         shutdown();
     }
 
 	public static void getBlogs() throws Exception {
 
-		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()[0];");
+		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()[2];");
 		JSONArray blogs = jsonObject.getJSONObject("data").getJSONArray("blogs");
 		
 		for(int i = 0 ; i < blogs.size(); i++)
@@ -106,10 +96,9 @@ public class AuthorIterate {
 				String blogID = blogs.getString(i).replace("http:","").replace("/","");
 				if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
 					//System.out.println(blogID);
-					if (getPosts(blogID)) {
-						Node blog = graphDb.createNode();
-						blog.setProperty( BLOG_KEY, blogID);
-						blogIndex.add(blog, BLOG_KEY, blogID);
+					if (getPosts("23198109")) {
+						//Blog Index only to store visited blogs
+						blogIndex.add(dummyNode, BLOG_KEY, blogID);
 					} 
 					break;
 				}
@@ -148,15 +137,17 @@ public class AuthorIterate {
 				myQuery.setMaxResults(25);
 				Feed resultFeed = myService.query(myQuery, Feed.class);
 				
+				String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default","");					
+				
 				Integer count = 0;
 				for (Entry entry : resultFeed.getEntries()) {
-					String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
-					if (entry.getAuthors().get(0).getUri()!=null && postIndex.get( POST_KEY, linkID).size()==0) {
+					String postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+					if (entry.getAuthors().get(0).getUri()!=null && postIndex.get( POST_KEY, postID).size()==0) {
 					
 						setMongoPost(entry);
 						count++; System.out.print("," + count);	
 						
-						ArrayList<Node> ArrNodes = getComments(linkID);
+						ArrayList<Node> ArrNodes = getComments(postID);
 						for ( Category category : entry.getCategories() ) {
 							String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
 							text = text.replaceAll("[^\\p{ASCII}]", "");
@@ -164,11 +155,15 @@ public class AuthorIterate {
 							for ( Node commentNode : ArrNodes )
 								TagRelation(tag, commentNode);
 						}
-						Node post = graphDb.createNode();
-						post.setProperty( POST_KEY, linkID);
-						postIndex.add(post, POST_KEY, linkID);
+						//Post Index only to store visited posts
+						postIndex.add(dummyNode, POST_KEY, postID);
 					}
 				}
+				
+				//Get last 25 blog comments
+				System.out.println("blogID:"+blogID);
+				ArrayList<Node> ArrNodes = getComments(blogID); 
+				
 				System.out.print("\n");
 				
 				tx.success();
@@ -205,12 +200,14 @@ public class AuthorIterate {
 				for (Entry entry : resultFeed.getEntries())
 				{
 					if (entry.getAuthors().get(0).getUri()!=null) {
+						//TODO
 						String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
 						if (profileID.matches("\\d+")) {
-							String linkID = entry.getLinks().get(0).getHref().replace("http://www.blogger.com/feeds/","");
+							String commentID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("comments/default/","");
 							Node commentNode = createAuthorNode(profileID);
 							ArrNodes.add(commentNode);
-							CommentRelation(commentNode, authorNode, linkID);
+							CommentRelation(commentNode, authorNode, commentID);
+							setMongoComment(postUri, entry);
 						}
 					}
 				}
@@ -232,17 +229,20 @@ public class AuthorIterate {
 		BasicDBObject doc = new BasicDBObject();
 
 		String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
-		doc.put("linkID", linkID);
+		doc.put("postID", linkID);
 		
 		if (collPosts.find(doc).count()==0) {
 			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
 			doc.put("authorID", authorID);
 			
+			Date published = new Date(entry.getPublished().getValue());
+			doc.put("published", published);
+			
 			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
 			content = content.replaceAll("[^\\p{ASCII}]", "");
 			doc.put("content", content);
 
-			ArrayList tags = new ArrayList();
+			ArrayList<String> tags = new ArrayList<String>();
 			for ( Category category : entry.getCategories() ) {
 				String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
 				text = text.replaceAll("[^\\p{ASCII}]", "");
@@ -253,6 +253,39 @@ public class AuthorIterate {
 			collPosts.insert(doc);
 		}
 		
+	}
+	
+	private static void setMongoComment(final String postUri, Entry entry) {
+
+		BasicDBObject doc = new BasicDBObject();
+		doc.put("postID", postUri);
+		
+		if (collPosts.find(doc).count()>0) {
+		
+			BasicDBObject post = (BasicDBObject)collPosts.findOne(doc);
+		
+			BasicDBObject comment = new BasicDBObject();
+			
+			String commentID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("comments/default/","");
+			comment.put("commentID", commentID);
+			
+			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+			comment.put("authorID", authorID);
+			
+			Date published = new Date(entry.getPublished().getValue());
+			comment.put("published", published);
+			
+			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
+			content = content.replaceAll("[^\\p{ASCII}]", "");
+			comment.put("content", content);
+			
+			System.out.print(" " + commentID + ",");
+			
+			post.append("comments", comment);
+		
+			collPosts.save(post);
+		}
+	
 	}
 	
     private static Node createAuthorNode( final String profileID )
@@ -318,6 +351,18 @@ public class AuthorIterate {
 			}
 		}
     }	
+	
+    private static void PropertyRelation( final Node PropertyNode, final Node AuthorNode)
+    {
+		Boolean hasRelation = false;
+		for ( Relationship relationship : AuthorNode.getRelationships( RelTypes.Property, Direction.OUTGOING ) )
+			hasRelation = relationship.getEndNode().equals(PropertyNode);
+			
+		if (!hasRelation) {
+			Relationship relationship = AuthorNode.createRelationshipTo(PropertyNode, RelTypes.Property);
+			relationship.setProperty("Weight", 1);
+		}
+    }
 	
     private static JSONObject GremlinNode(String script) throws Exception
     {

@@ -92,7 +92,7 @@ class GraphDatabaseService
 			$nodes[] = Node::inflateFromResponse( $this, $nodeData );
 		}
 		
-		if (empty($nodes)) throw new NotFoundException();
+		//if (empty($nodes)) throw new NotFoundException();
 		
 		return $nodes;
 	}
