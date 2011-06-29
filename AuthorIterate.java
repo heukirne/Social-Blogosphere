@@ -60,7 +60,6 @@ public class AuthorIterate {
 		commentIndex = graphDb.index().forRelationships( "comments" );
 		registerShutdownHook();
 
-
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		collPosts = mongoDb.getCollection("posts");
@@ -87,28 +86,38 @@ public class AuthorIterate {
 
 	public static void getBlogs() throws Exception {
 
-		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()[2];");
+		String jsonCount = GremlinExecute("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._().count();");
+		int countAuthors =  Integer.parseInt(jsonCount);
+
+		for(int j = 0 ; j < countAuthors; j++)
+		{
+		
+		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()["+j+"];");
 		JSONArray blogs = jsonObject.getJSONObject("data").getJSONArray("blogs");
 		
-		for(int i = 0 ; i < blogs.size(); i++)
-		{
-			Transaction tx = graphDb.beginTx();
-			try {
-				String blogID = blogs.getString(i).replace("http:","").replace("/","");
-				if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
-					//System.out.println(blogID);
-					if (getPosts("23198109")) {
-						//Blog Index only to store visited blogs
-						Node blogNode = graphDb.createNode();
-						blogNode.setProperty( BLOG_KEY, blogID);
-						blogIndex.add(blogNode, BLOG_KEY, blogID);
-					} 
+			for(int i = 0 ; i < blogs.size(); i++)
+			{
+				Transaction tx = graphDb.beginTx();
+				try {
+					String blogID = blogs.getString(i).replace("http:","").replace("/","");
+					if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
+						//System.out.println(blogID);
+						if (getPosts(blogID)) {
+							//Blog Index only to store visited blogs
+							Node blogNode = graphDb.createNode();
+							blogNode.setProperty( BLOG_KEY, blogID);
+							blogIndex.add(blogNode, BLOG_KEY, blogID);
+						} 
+					}
+					tx.success();
 					break;
+				} finally {
+					tx.finish();
 				}
-				tx.success();
-			} finally {
-				tx.finish();
 			}
+			
+			if (j>5) break; //LIMIT!!
+			
 		}
 		
 		/* Get Blogs from EmbeddedReadOnlyGraphDatabase
@@ -136,11 +145,13 @@ public class AuthorIterate {
 					feedUrl = new URL("http://" + blogUri + "/feeds/posts/default");
 				} 
 				Query myQuery = new Query(feedUrl);
-				myQuery.setStartIndex(1);
+				//myQuery.setStartIndex(1);
+				DateTime dtMin = DateTime.parseDate("2011-01-01");
+				myQuery.setPublishedMin(dtMin);
 				myQuery.setMaxResults(25);
 				Feed resultFeed = myService.query(myQuery, Feed.class);
 				
-				String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default","");					
+				String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
 				
 				Integer count = 0;
 				for (Entry entry : resultFeed.getEntries()) {
@@ -166,8 +177,8 @@ public class AuthorIterate {
 				}
 				
 				//Get last 25 blog comments
-				System.out.println("blogID:"+blogID);
-				ArrayList<Node> ArrNodes = getComments(blogID); 
+				//System.out.println("blogID:"+blogID);
+				//ArrayList<Node> ArrNodes = getComments(blogID); 
 				
 				System.out.print("\n");
 				
@@ -242,6 +253,10 @@ public class AuthorIterate {
 			
 			Date published = new Date(entry.getPublished().getValue());
 			doc.put("published", published);
+			
+			String title = Normalizer.normalize(entry.getTitle().getPlainText(), Normalizer.Form.NFD);
+			title = title.replaceAll("[^\\p{ASCII}]", "");
+			doc.put("title", title);
 			
 			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
 			content = content.replaceAll("[^\\p{ASCII}]", "");
@@ -372,7 +387,7 @@ public class AuthorIterate {
 		}
     }
 	
-    private static JSONObject GremlinNode(String script) throws Exception
+    private static String GremlinExecute(String script) throws Exception
     {
 		String GremlinURI = SERVER_ROOT_URI + "ext/GremlinPlugin/graphdb/execute_script";
 
@@ -397,6 +412,13 @@ public class AuthorIterate {
 		}
 		wr.close();
 		rd.close();
+		
+		return json;
+	}
+	
+    private static JSONObject GremlinNode(String script) throws Exception
+    {
+		String json = GremlinExecute(script);
 	
 		json = json.replace("[ {","{").replace("} ]","}");
 		return JSONObject.fromObject(json);
