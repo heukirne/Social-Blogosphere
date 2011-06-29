@@ -51,7 +51,7 @@ public class AuthorIterate {
     }
 
     public static void main(String[] args) throws Exception {		
-	
+		
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
 		tagIndex = graphDb.index().forNodes( "tags" );
@@ -67,18 +67,19 @@ public class AuthorIterate {
 		collPosts.ensureIndex("linkID");		
 		
 		Transaction tx = graphDb.beginTx();
-		dummyNode = graphDb.createNode();
 		
-		getBlogs();
-		
-		System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
-		System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
-		System.out.println("Numbers of Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
-		System.out.println("Numbers of Posts:" + postIndex.query( POST_KEY , "*" ).size());
-		System.out.println("Numbers of Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
+		try {
+			getBlogs();
 
-		tx.success();
-		tx.finish();
+			System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
+			System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
+			System.out.println("Numbers of Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
+			System.out.println("Numbers of Posts:" + postIndex.query( POST_KEY , "*" ).size());
+			System.out.println("Numbers of Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
+			tx.success();
+		} finally {
+			tx.finish();
+		}
 		
         System.out.println( "Shutting down database ..." );
         shutdown();
@@ -98,7 +99,9 @@ public class AuthorIterate {
 					//System.out.println(blogID);
 					if (getPosts("23198109")) {
 						//Blog Index only to store visited blogs
-						blogIndex.add(dummyNode, BLOG_KEY, blogID);
+						Node blogNode = graphDb.createNode();
+						blogNode.setProperty( BLOG_KEY, blogID);
+						blogIndex.add(blogNode, BLOG_KEY, blogID);
 					} 
 					break;
 				}
@@ -156,7 +159,9 @@ public class AuthorIterate {
 								TagRelation(tag, commentNode);
 						}
 						//Post Index only to store visited posts
-						postIndex.add(dummyNode, POST_KEY, postID);
+						Node postNode = graphDb.createNode();
+						postNode.setProperty( POST_KEY, postID);
+						postIndex.add(postNode, POST_KEY, postID);
 					}
 				}
 				
@@ -228,8 +233,8 @@ public class AuthorIterate {
 		
 		BasicDBObject doc = new BasicDBObject();
 
-		String linkID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
-		doc.put("postID", linkID);
+		String postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+		doc.put("postID", postID);
 		
 		if (collPosts.find(doc).count()==0) {
 			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
@@ -242,13 +247,14 @@ public class AuthorIterate {
 			content = content.replaceAll("[^\\p{ASCII}]", "");
 			doc.put("content", content);
 
-			ArrayList<String> tags = new ArrayList<String>();
+			BasicDBList tags = new BasicDBList();
 			for ( Category category : entry.getCategories() ) {
 				String text = Normalizer.normalize(category.getTerm(), Normalizer.Form.NFD);
 				text = text.replaceAll("[^\\p{ASCII}]", "");
-				tags.add(text);
+				tags.add(tags.size(), text);
 			}
 			doc.put("tags", tags);
+			doc.put("comments", new BasicDBList());
 
 			collPosts.insert(doc);
 		}
@@ -260,10 +266,12 @@ public class AuthorIterate {
 		BasicDBObject doc = new BasicDBObject();
 		doc.put("postID", postUri);
 		
-		if (collPosts.find(doc).count()>0) {
-		
+		if (collPosts.find(doc).count()!=0) {
+			
 			BasicDBObject post = (BasicDBObject)collPosts.findOne(doc);
 		
+			BasicDBList comments = (BasicDBList)post.get("comments");
+			
 			BasicDBObject comment = new BasicDBObject();
 			
 			String commentID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("comments/default/","");
@@ -279,9 +287,9 @@ public class AuthorIterate {
 			content = content.replaceAll("[^\\p{ASCII}]", "");
 			comment.put("content", content);
 			
-			System.out.print(" " + commentID + ",");
-			
-			post.append("comments", comment);
+			comments.put(comments.size(),comment);
+	
+			post.append("comments", comments);
 		
 			collPosts.save(post);
 		}
