@@ -1,5 +1,6 @@
 <?php
 // Google don't like flood requests
+// 231 days for 2 million users profile page each 10s
 require('neo4j.blog.php');
 require('blogger.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
@@ -71,7 +72,6 @@ while (true) {
 		
 		$author->info = 1;
 		$author->save();
-		echo "sleep;"; sleep(10);
 		echo "\n";
 	} else {
 		$erroHandle = error_get_last();
@@ -80,6 +80,6 @@ while (true) {
 			$author->save();
 		}
 	}
-	
+	sleep(10);
 	
 }

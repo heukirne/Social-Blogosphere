@@ -1,5 +1,6 @@
 <?php
 // Google don't like flood requests
+// 41 days for 2 million user in pages of 25 each 30s and 50% probability
 require('neo4j.blog.php');
 require('blogger.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
@@ -43,10 +44,10 @@ while (true) {
 				
 				$newBrAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','$local')._().bothE.count();") - $numBrAuthors;
 				
-				echo "New Authors $local: $newBrAuthors!\n"; sleep(30);
+				echo "New Authors $local: $newBrAuthors!\n"; 
 			} else {
 				$erroHandle = error_get_last();
 			}	
-
+			sleep(30);
 	}
 }

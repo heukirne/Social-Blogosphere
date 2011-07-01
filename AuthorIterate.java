@@ -24,7 +24,7 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String DB_BASE = "var/base";
+	private static final String DB_BASE = "base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
 	private static final String TAG_KEY = "term";
@@ -116,7 +116,7 @@ public class AuthorIterate {
 				}
 			}
 			
-			if (j>5) break; //LIMIT!!
+			if (j>20) break; //LIMIT!!
 			
 		}
 		
@@ -245,6 +245,10 @@ public class AuthorIterate {
 		BasicDBObject doc = new BasicDBObject();
 
 		String postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+		String blogID = postID.substring(0,postID.indexOf("/"));
+		postID = postID.replace(blogID+"/","");
+		
+		doc.put("blogID", blogID);
 		doc.put("postID", postID);
 		
 		if (collPosts.find(doc).count()==0) {
@@ -276,9 +280,14 @@ public class AuthorIterate {
 		
 	}
 	
-	private static void setMongoComment(final String postUri, Entry entry) {
+	private static void setMongoComment(String postUri, Entry entry) {
 
 		BasicDBObject doc = new BasicDBObject();
+		
+		String blogID = postUri.substring(0,postUri.indexOf("/"));
+		postUri = postUri.replace(blogID+"/","");
+		
+		doc.put("blogID", blogID);		
 		doc.put("postID", postUri);
 		
 		if (collPosts.find(doc).count()!=0) {
