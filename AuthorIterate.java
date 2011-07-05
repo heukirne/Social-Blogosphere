@@ -384,15 +384,22 @@ public class AuthorIterate {
 		}
     }	
 	
-    private static void PropertyRelation( final Node PropertyNode, final Node AuthorNode)
+    private static void PropertyRelation( final String Property, final Node AuthorNode)
     {
+		Node PropertyNode =  propertyIndex.get( PROP_KEY, Property).getSingle();
+        if (PropertyNode==null) {
+			PropertyNode = graphDb.createNode();
+			PropertyNode.setProperty( PROP_KEY, Property);
+			propertyIndex.add( PropertyNode, PROP_KEY, Property);
+		}
+	
 		Boolean hasRelation = false;
 		for ( Relationship relationship : AuthorNode.getRelationships( RelTypes.Property, Direction.OUTGOING ) )
-			hasRelation = relationship.getEndNode().equals(PropertyNode);
+			if (relationship.getEndNode().equals(PropertyNode))
+				hasRelation = true;
 			
 		if (!hasRelation) {
 			Relationship relationship = AuthorNode.createRelationshipTo(PropertyNode, RelTypes.Property);
-			relationship.setProperty("Weight", 1);
 		}
     }
 	
