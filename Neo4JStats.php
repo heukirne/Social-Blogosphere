@@ -6,7 +6,7 @@ http://romikoderbynew.wordpress.com/2011/06/11/neo4j-and-gremlin-plugin-install-
 require('neo4j.blog.php');
 $graphDb = new GraphDatabaseService('http://localhost:7474/db/data/');
 
-//$numAuthors = $graphDb->gremlinExec("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*').count();");
+$numAuthors = $graphDb->gremlinExec("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*').count();");
 $numUnsetAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs==null}._(){it.blogsSet==null}.count();");
 $numBrAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','BR')._().bothE.count();");
 //$numBlogs = $graphDb->gremlinExec("g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.blogs}._().blogs.toList().toString().size() - g.getIndex('authors',Vertex.class).get('id',Neo4jTokens.QUERY_HEADER+'*')._(){it.blogs}._().blogs.toList().toString().replace(\",\",\"\").size();");

@@ -12,6 +12,12 @@ import com.google.gdata.util.ServiceException;
 import net.sf.json.JSONObject;
 import net.sf.json.JSONArray;
 
+import java.sql.Connection;
+import java.sql.Statement;
+import java.sql.ResultSet;
+import java.sql.DriverManager;
+
+import java.util.regex.*;
 import java.util.*;
 import java.net.*;
 import java.io.*;
@@ -24,12 +30,14 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
+	private static final String myConnString = "jdbc:mysql://localhost/blogger?user=root&password=";
 	private static final String DB_BASE = "base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
 	private static final String TAG_KEY = "term";
 	private static final String POST_KEY = "post";
 	private static final String BLOG_KEY = "blog";
+	private static final String PROP_KEY = "info";
     private static GraphDatabaseService graphDb;
 	private static GraphDatabaseService readonlyDb;
     private static Index<Node> userIndex; 
@@ -42,6 +50,8 @@ public class AuthorIterate {
 	private static Mongo mongoConn;
 	private static DB mongoDb;
 	private static DBCollection collPosts;
+	private static Connection mysqlConn;
+	private static Statement myStm;
  
      private static enum RelTypes implements RelationshipType
     {
@@ -51,6 +61,9 @@ public class AuthorIterate {
     }
 
     public static void main(String[] args) throws Exception {		
+				
+		mysqlConn = DriverManager.getConnection(myConnString);
+		myStm = mysqlConn.createStatement();
 		
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
@@ -65,11 +78,10 @@ public class AuthorIterate {
 		collPosts = mongoDb.getCollection("posts");
 		collPosts.ensureIndex("linkID");		
 		
-		Transaction tx = graphDb.beginTx();
+		getBlogs();
 		
+		Transaction tx = graphDb.beginTx();
 		try {
-			getBlogs();
-
 			System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
 			System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
 			System.out.println("Numbers of Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
@@ -86,20 +98,32 @@ public class AuthorIterate {
 
 	public static void getBlogs() throws Exception {
 
-		String jsonCount = GremlinExecute("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._().count();");
-		int countAuthors =  Integer.parseInt(jsonCount);
+		ResultSet rs = null;
+		String[] blogs = null;
 
-		for(int j = 0 ; j < countAuthors; j++)
+		for(int j = 1 ; j < 100; j++)
 		{
+			
+			blogs = null;
+			try {
+				myStm.executeQuery("SELECT blogs FROM author WHERE Local = 'BR' and length(Blogs) > 2 ORDER BY profileID LIMIT "+ j +",1");
+				rs = myStm.getResultSet();
+				rs.next();
+				blogs = Pattern.compile(",").split(rs.getString("blogs"));
+			} catch (Exception ex){ 
+				System.out.println("erro mysql;"); 
+				mysqlConn = DriverManager.getConnection(myConnString);
+				myStm = mysqlConn.createStatement();
+				j--;
+			}
+			finally { }
 		
-		JSONObject jsonObject = GremlinNode("g.getIndex('property',Vertex.class).get('info','BR')._().inE.outV._(){it.blogs}._()["+j+"];");
-		JSONArray blogs = jsonObject.getJSONObject("data").getJSONArray("blogs");
-		
-			for(int i = 0 ; i < blogs.size(); i++)
+			if (blogs==null) continue;
+			for (String blog : blogs)
 			{
 				Transaction tx = graphDb.beginTx();
 				try {
-					String blogID = blogs.getString(i).replace("http:","").replace("/","");
+					String blogID = blog.trim().replace("http:","").replace("/","");
 					if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
 						//System.out.println(blogID);
 						if (getPosts(blogID)) {
@@ -110,32 +134,18 @@ public class AuthorIterate {
 						} 
 					}
 					tx.success();
-					break;
 				} finally {
 					tx.finish();
 				}
 			}
-			
-			if (j>20) break; //LIMIT!!
-			
+			//Thread.currentThread().sleep(300);
 		}
-		
-		/* Get Blogs from EmbeddedReadOnlyGraphDatabase
-		String nodeStr = jsonObject.getString("self").replace(SERVER_ROOT_URI+"node/","");
-		int nodeId =  Integer.parseInt(nodeStr);		
-		readonlyDb = new EmbeddedReadOnlyGraphDatabase( DB_BLOG );
-		Node node = readonlyDb.getNodeById(nodeId);
-		ArrayList<String> blogsAr = new ArrayList<String>(Arrays.asList((String[]) node.getProperty("blogs")));
-		for (String blog : blogsAr)
-			System.out.println(blog.replace("http:","").replace("/",""));
-		readonlyDb.shutdown();
-		*/
 		
 	}
 	
 	public static Boolean getPosts(final String blogUri) throws ServiceException, IOException {
 			
-			System.out.print("Retriving Posts from:" + blogUri);			
+			System.out.print("Retriving:" + blogUri);			
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			Transaction tx = graphDb.beginTx();
 			
@@ -262,9 +272,11 @@ public class AuthorIterate {
 			title = title.replaceAll("[^\\p{ASCII}]", "");
 			doc.put("title", title);
 			
-			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
-			content = content.replaceAll("[^\\p{ASCII}]", "");
-			doc.put("content", content);
+			if (entry.getContent()!=null) {
+				String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
+				content = content.replaceAll("[^\\p{ASCII}]", "");
+				doc.put("content", content);
+			}
 
 			BasicDBList tags = new BasicDBList();
 			for ( Category category : entry.getCategories() ) {

@@ -44,9 +44,10 @@ while (true) {
 				
 				$newBrAuthors = $graphDb->gremlinExec("g.getIndex('property',Vertex.class).get('info','$local')._().bothE.count();") - $numBrAuthors;
 				
-				echo "New Authors $local: $newBrAuthors!\n"; 
+				echo "$newBrAuthors, "; 
 			} else {
 				$erroHandle = error_get_last();
+				echo "\n";
 			}	
 			sleep(30);
 	}
