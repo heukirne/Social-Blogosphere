@@ -12,6 +12,7 @@ import com.google.gdata.util.ServiceException;
 import net.sf.json.JSONObject;
 import net.sf.json.JSONArray;
 
+import java.sql.SQLException;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.sql.ResultSet;
@@ -30,7 +31,7 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String myConnString = "jdbc:mysql://localhost/blogger?user=root&password=";
+	private static final String myConnString = "jdbc:mysql://localhost/blogs?user=root&password=";
 	private static final String DB_BASE = "base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
@@ -60,10 +61,18 @@ public class AuthorIterate {
 		Property
     }
 
+	 public static int relationSize(Iterable<Relationship> iterable) {
+		int cont = 0;
+		for (Relationship relation : iterable) cont++;
+		return cont;
+	  }
+	
     public static void main(String[] args) throws Exception {		
 				
 		mysqlConn = DriverManager.getConnection(myConnString);
 		myStm = mysqlConn.createStatement();
+		myStm.executeQuery("set wait_timeout = 7200");
+		
 		
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
@@ -81,7 +90,7 @@ public class AuthorIterate {
 		getBlogs();
 		
 		Transaction tx = graphDb.beginTx();
-		try {
+		try {	
 			System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
 			System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
 			System.out.println("Numbers of Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
@@ -101,22 +110,16 @@ public class AuthorIterate {
 		ResultSet rs = null;
 		String[] blogs = null;
 
-		for(int j = 1 ; j < 100; j++)
+		for(int j = 3000 ; j <= 10000; j++)
 		{
 			
 			blogs = null;
-			try {
-				myStm.executeQuery("SELECT blogs FROM author WHERE Local = 'BR' and length(Blogs) > 2 ORDER BY profileID LIMIT "+ j +",1");
-				rs = myStm.getResultSet();
+			myStm.executeQuery("SELECT blogs FROM author WHERE Local = 'BR' and length(Blogs) > 2 ORDER BY profileID LIMIT "+ j +",1");
+			rs = myStm.getResultSet();
+			if (rs!=null) {
 				rs.next();
 				blogs = Pattern.compile(",").split(rs.getString("blogs"));
-			} catch (Exception ex){ 
-				System.out.println("erro mysql;"); 
-				mysqlConn = DriverManager.getConnection(myConnString);
-				myStm = mysqlConn.createStatement();
-				j--;
 			}
-			finally { }
 		
 			if (blogs==null) continue;
 			for (String blog : blogs)
@@ -124,6 +127,7 @@ public class AuthorIterate {
 				Transaction tx = graphDb.beginTx();
 				try {
 					String blogID = blog.trim().replace("http:","").replace("/","");
+					//System.out.println(blogID);
 					if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
 						//System.out.println(blogID);
 						if (getPosts(blogID)) {
@@ -138,7 +142,20 @@ public class AuthorIterate {
 					tx.finish();
 				}
 			}
-			//Thread.currentThread().sleep(300);
+			
+			if ((j%10)==0) {
+				Transaction tx = graphDb.beginTx();	
+				String sql = "UPDATE neo4jstats SET " +
+							"users = " + userIndex.query( AUTHOR_KEY , "*" ).size() + "," +
+							"blogs = " + blogIndex.query( BLOG_KEY , "*" ).size() + "," +
+							"tags = " + tagIndex.query( TAG_KEY , "*" ).size() + "," +
+							"posts = " + postIndex.query( POST_KEY , "*" ).size() + ", " +
+							"comments = " + commentIndex.query( COMMENT_KEY , "*" ).size() + " LIMIT 1";	
+				tx.success();
+				tx.finish();
+				myStm.executeUpdate(sql);
+			}
+			
 		}
 		
 	}
@@ -202,7 +219,7 @@ public class AuthorIterate {
 				return false;
 			} catch (ServiceException e) {
 				System.out.println("Service Exception!");
-				return false;
+				return true;
 			} finally {
 				tx.finish();
 			}
@@ -234,9 +251,11 @@ public class AuthorIterate {
 							ArrNodes.add(commentNode);
 							CommentRelation(commentNode, authorNode, commentID);
 							setMongoComment(postUri, entry);
+							updateDegree(commentNode);
 						}
 					}
 				}
+				updateDegree(authorNode);
 				tx.success();
 			} catch (MalformedURLException e) {
 				System.out.println("Malformed URL Exception!");
@@ -332,7 +351,7 @@ public class AuthorIterate {
 	
 	}
 	
-    private static Node createAuthorNode( final String profileID )
+    private static Node createAuthorNode( final String profileID ) throws Exception
     {
         if (userIndex.get( AUTHOR_KEY, profileID).size()==0) {
 			Node node = graphDb.createNode();
@@ -343,6 +362,15 @@ public class AuthorIterate {
 			return userIndex.get( AUTHOR_KEY, profileID).getSingle();
 		}
     }	
+	
+	private static void updateDegree(Node node) throws Exception
+	{
+		if (node.hasProperty(AUTHOR_KEY)) {
+			myStm.executeUpdate("INSERT INTO author SET profileID = '" + node.getProperty(AUTHOR_KEY) + "'");
+			int size = relationSize(node.getRelationships(RelTypes.Comments, Direction.BOTH));
+			myStm.executeUpdate("UPDATE author SET degree = " + size + " WHERE profileID = '" + node.getProperty(AUTHOR_KEY) + "' LIMIT 1");
+		}
+	}
 	
     private static Node TagNode( final String Term )
     {
@@ -379,18 +407,12 @@ public class AuthorIterate {
 			for ( Relationship relationship : CommentNode.getRelationships( RelTypes.Comments, Direction.OUTGOING ) )
                 if (hasRelation = relationship.getEndNode().equals(AuthorNode)) {
 					int Weight = ((Integer)relationship.getProperty("Weight")).intValue();
-					ArrayList<String> links = new ArrayList<String>(Arrays.asList((String[]) relationship.getProperty("links")));
-					links.add(Uri);
 					relationship.setProperty("Weight", Weight+1);
-					relationship.setProperty("links", links.toArray(new String[links.size()]));
 					commentIndex.add(relationship , COMMENT_KEY, Uri);
 				}
 			if (!hasRelation) {
 				Relationship relationship = CommentNode.createRelationshipTo(AuthorNode, RelTypes.Comments);
 				relationship.setProperty("Weight", 1);
-				ArrayList<String> links = new ArrayList<String>();
-				links.add(Uri);
-				relationship.setProperty("links", links.toArray(new String[links.size()]));
 				commentIndex.add(relationship , COMMENT_KEY, Uri);
 			}
 		}
@@ -450,6 +472,41 @@ public class AuthorIterate {
 	
 		json = json.replace("[ {","{").replace("} ]","}");
 		return JSONObject.fromObject(json);
+	}
+	
+	private static ResultSet querySQL(final String sql) throws Exception
+	{
+		Boolean bExec = true;
+		while (bExec) {
+			try {	
+				myStm.executeQuery(sql);
+				bExec = false;
+			} catch (SQLException ex){ 
+				bExec = false;
+			} catch (Exception ex){ 
+				System.out.println("<Reconnect MySQL>"); 
+				mysqlConn = DriverManager.getConnection(myConnString);
+				myStm = mysqlConn.createStatement();
+			}
+		}
+		return myStm.getResultSet();
+	}
+	
+	private static void updateSQL(final String sql) throws Exception
+	{
+		Boolean bExec = true;
+		while (bExec) {
+			try {	
+				myStm.executeUpdate(sql);
+				bExec = false;
+			} catch (SQLException ex){ 
+				bExec = false;
+			} catch (Exception ex){ 
+				System.out.println("<Reconnect MySQL>"); 
+				mysqlConn = DriverManager.getConnection(myConnString);
+				myStm = mysqlConn.createStatement();
+			}
+		}
 	}
 	
     private static void shutdown()

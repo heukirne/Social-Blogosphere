@@ -3,27 +3,35 @@
 // 231 days for 2 million users profile page each 10s
 require('blogger.php');
 $getAuthorInfo = "http://www.blogger.com/profile/";
-$propArray = array('Atividade','Signo_astrologico','Profissao','Sexo');
+$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
 $link = mysql_connect('localhost', 'root', '');
-mysql_select_db('gemeos110');
+mysql_select_db('blogs');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
 }
+mysql_query("set wait_timeout = 7200");
 
 $iA=0;
 while (true) {
 
-	$sql = "SELECT profileID as id FROM author WHERE Find = 0 and Local = 'BR' ORDER BY RAND() LIMIT 1";
-	$result = mysql_query($sql);
-	$author = mysql_fetch_assoc($result);
-	mysql_free_result($result);
-	
-	if (!$author) break;
-	
 	$html="";
-	echo ($iA++).", ";
+	$iA++;
+	//echo ($iA).", ";
 	
-	if ($html = file_get_contents($getAuthorInfo.$author['id'])) {
+	$sql = "SELECT profileID as id FROM author WHERE Find = 0 and Local = 'BR' ORDER BY RAND() LIMIT 1";
+	//$sql = "SELECT profileID as id FROM author WHERE Find = 0 ORDER BY degree DESC LIMIT 1";
+	$result = mysql_query($sql);
+	if ($result) {
+		$num_rows = mysql_num_rows($result);
+		$author = mysql_fetch_assoc($result);
+		mysql_free_result($result);
+		if ($num_rows==0) break;
+	} else {
+		echo "\n".mysql_error()."\n";
+		continue;
+	}	
+	
+	if (@$html = file_get_contents($getAuthorInfo.$author['id'])) {
 		$html = str_replace('strong','b',$html);
 		preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
 		preg_match_all("/href=\"([^\"]+)\"[^\"]+\"contributor-to/", $html, $blogs); 
@@ -41,8 +49,8 @@ while (true) {
 				$result = array();
 				if (strpos($value,'role')) preg_match("/ind=([^\"]*)/",$value,$result);
 				if (strpos($value,'title')) preg_match("/q=([^\"]*)/",$value,$result);
-				if (strpos($value,'loc1')) preg_match("/loc1=(\w*)/",$value,$result);
-				if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
+				//if (strpos($value,'loc1')) preg_match("/loc1=(\w*)/",$value,$result);
+				//if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
 				if (strpos($value,'loc0')) preg_match("/loc0=(\w{2})/",$value,$result);
 				$prop[$i] = Blogger::normalize((empty($result))?$value:$result[1]);
 			}
@@ -57,13 +65,23 @@ while (true) {
 		$sql .= " Blogs = '".implode(',',$blogs[1])."',";
 		$sql .= " Find = 1";
 		$sql .= " WHERE profileID = '{$author['id']}';";		
-		
+		echo "+";
 	} else {
 		$erroHandle = error_get_last();
-		if (strpos($erroHandle['message'],'404 Not Found') || strpos($erroHandle['message'],'500 Internal Server')) {
-			$sql = "UPDATE author SET Find = 1 WHERE profileID = '{$author['id']}';";			
+		if (strpos($erroHandle['message'],'404 Not Found')) {
+			$sql = "UPDATE author SET Find = 404 WHERE profileID = '{$author['id']}';";
+			echo "-";
 		}
+		if (strpos($erroHandle['message'],'500 Internal Server')) {
+			$sql = "UPDATE author SET Find = 500 WHERE profileID = '{$author['id']}';";
+			echo "-";
+		}
+		if (strpos($erroHandle['message'],'503')) {
+			echo "#";
+		}
+		
 	}
+	//echo $sql;
 	mysql_query($sql);
 	sleep(7);
 	

@@ -6,14 +6,16 @@ require('blogger.php');
 $local = 'BR';
 $getAtuhorBR = "http://www.blogger.com/profile-find.g?t=l&loc0=$local&start=:i&ct=:ct";
 $link = mysql_connect('localhost', 'root', '');
-mysql_select_db('gemeos110');
+mysql_select_db('blogs');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
 }
+mysql_query("set wait_timeout = 7200");
+
 $cont=0;
 while (true) {
 	$ct = array(1 => array(0 => ""));
-	for ($i=0;$i<1100;$i+=10) {
+	for ($i=0;$i<4000;$i+=10) {
 
 			$urlNow = str_replace(':i',$i,$getAtuhorBR);
 			$urlNow = str_replace(':ct',$ct[1][0],$urlNow);
