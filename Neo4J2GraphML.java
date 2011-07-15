@@ -49,7 +49,6 @@ public class Neo4J2GraphML {
 					output.write("<data key=\"weight\">1.0</data>\n");
 				output.write("</edge>\n");
 			}
-			//break;
 		}
 		
 		output.write("</graph>\n");

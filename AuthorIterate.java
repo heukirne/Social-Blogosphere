@@ -24,9 +24,6 @@ import java.net.*;
 import java.io.*;
 import java.text.Normalizer;
  
-/**
- * Example class that constructs a simple graph with message attributes and then prints them.
- */
 public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
@@ -68,11 +65,25 @@ public class AuthorIterate {
 	  }
 	
     public static void main(String[] args) throws Exception {		
+	
+		mongoConn = new Mongo( "localhost" , 27017 );
+		mongoDb = mongoConn.getDB( "blogdb" );
+		
+		try {
+			mongoDb.getCollectionNames();
+		} catch (Exception e) {
+			System.out.println("MongoDB Offline.");
+			System.exit(1);
+		}
+		
+		collPosts = mongoDb.getCollection("posts");
+		collPosts.ensureIndex("postID");
+		collPosts.ensureIndex("blogID");	
+		
 				
 		mysqlConn = DriverManager.getConnection(myConnString);
 		myStm = mysqlConn.createStatement();
 		myStm.executeQuery("set wait_timeout = 7200");
-		
 		
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
@@ -81,27 +92,27 @@ public class AuthorIterate {
 		blogIndex = graphDb.index().forNodes( "blogs" );
 		commentIndex = graphDb.index().forRelationships( "comments" );
 		registerShutdownHook();
-
-		mongoConn = new Mongo( "localhost" , 27017 );
-		mongoDb = mongoConn.getDB( "blogdb" );
-		collPosts = mongoDb.getCollection("posts");
-		collPosts.ensureIndex("linkID");		
 		
 		getBlogs();
 		
 		Transaction tx = graphDb.beginTx();
 		try {	
-			System.out.println("Numbers of Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
-			System.out.println("Numbers of Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
-			System.out.println("Numbers of Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
-			System.out.println("Numbers of Posts:" + postIndex.query( POST_KEY , "*" ).size());
-			System.out.println("Numbers of Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
+			System.out.println("Neo4j Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
+			System.out.println("Neo4j Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
+			System.out.println("Neo4j Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
+			System.out.println("Neo4j Posts:" + postIndex.query( POST_KEY , "*" ).size());
+			System.out.println("Neo4j Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
 			tx.success();
 		} finally {
 			tx.finish();
 		}
 		
-        System.out.println( "Shutting down database ..." );
+		System.out.println( "MongoDB Posts: " + collPosts.getCount() );	
+		System.out.println( "MongoDB Blogs Filled: " + collPosts.distinct("blogID").size() );
+		System.out.println( "MongoDB Comments: " + collPosts.distinct("comments.commentID").size() );
+		System.out.println( "MongoDB Tags: " + collPosts.distinct("tags").size() );
+		System.out.println( "MongoDB Users Posted: " + collPosts.distinct("authorID").size() );
+		
         shutdown();
     }
 
@@ -110,7 +121,7 @@ public class AuthorIterate {
 		ResultSet rs = null;
 		String[] blogs = null;
 
-		for(int j = 3000 ; j <= 10000; j++)
+		for(int j = 0 ; j <= 10000; j++)
 		{
 			
 			blogs = null;
@@ -154,6 +165,7 @@ public class AuthorIterate {
 				tx.success();
 				tx.finish();
 				myStm.executeUpdate(sql);
+				if (isExit()) break;
 			}
 			
 		}
@@ -509,10 +521,48 @@ public class AuthorIterate {
 		}
 	}
 	
+	private static Boolean isExit() {
+		File file = new File("AuthorIterateExit.txt");
+		StringBuffer contents = new StringBuffer();
+		BufferedReader reader = null;
+		
+		 
+		try {
+			String text = null;
+			reader = new BufferedReader(new FileReader(file));
+			 
+			while ((text = reader.readLine()) != null) {
+				contents.append(text);
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (reader != null) {
+				reader.close();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		int intExit = Integer.parseInt(contents.toString());
+		if (intExit==1)
+			return true;
+		else
+			return false;
+	}
+	
     private static void shutdown()
     {
+		System.out.println( "Shutting down database ..." );
         graphDb.shutdown();
 		mongoConn.close();
+		try {
+			myStm.close();
+		} catch (Exception ex) {}
     }
 	
     private static void registerShutdownHook()
