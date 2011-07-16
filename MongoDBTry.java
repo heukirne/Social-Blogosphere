@@ -42,9 +42,19 @@ public class MongoDBTry {
 							"	var d = new Date(this.published); "+
 							"	emit( d.getMonth() , { count : 1 } ); "+
 							"};";
+							
+		String mapContent =	"function(){ " +
+							"	this.content.split(' ').forEach( " +
+							"		function(word){ " +
+							"			word.split('\\n').forEach( " +
+							"				function(piece){ emit( piece , { count : 1 } ); } "+
+							"			); "+
+							"		} "+
+							"	); "+
+							"};";							
 		
         String reduceDefault = "function( key , values ){ "+
-							"	var total = 0; "+
+							"	var total = 0; " +
 							"	for ( var i=0; i<values.length; i++ ) "+
 							"		total += values[i].count; "+
 							"	return { count : total }; "+
@@ -55,7 +65,7 @@ public class MongoDBTry {
 		
 		System.out.println("Posts: " + collPosts.count(doc));
 		
-        MapReduceOutput output = collPosts.mapReduce(mapMonth, reduceDefault, null, MapReduceCommand.OutputType.INLINE, doc);
+        MapReduceOutput output = collPosts.mapReduce(mapContent, reduceDefault, null, MapReduceCommand.OutputType.INLINE, doc);
 		int cont=0;
 		for (DBObject mapReduceObject : output.results()) {
             System.out.println(mapReduceObject);
