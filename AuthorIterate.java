@@ -1,6 +1,7 @@
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.*;
 import org.neo4j.kernel.*;
+import org.neo4j.helpers.collection.IteratorUtil;
 
 import com.mongodb.*;
 
@@ -28,7 +29,7 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String myConnString = "jdbc:mysql://localhost/blogs?user=root&password=";
+	private static final String myConnString = "jdbc:mysql://localhost/gemeos110?user=gemeos110&password=dias09ufrgs";
 	private static final String DB_BASE = "base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
@@ -53,9 +54,7 @@ public class AuthorIterate {
  
      private static enum RelTypes implements RelationshipType
     {
-        Comments,
-        Tags,
-		Property
+        Comments, Tags, Property
     }
 
 	 public static int relationSize(Iterable<Relationship> iterable) {
@@ -78,12 +77,17 @@ public class AuthorIterate {
 		
 		collPosts = mongoDb.getCollection("posts");
 		collPosts.ensureIndex("postID");
-		collPosts.ensureIndex("blogID");	
+		collPosts.ensureIndex("blogID");
+		collPosts.ensureIndex("authorID");		
 		
-				
+		try {
 		mysqlConn = DriverManager.getConnection(myConnString);
 		myStm = mysqlConn.createStatement();
 		myStm.executeQuery("set wait_timeout = 7200");
+		} catch (Exception e) {
+			System.out.println("MySQL Offline.");
+			System.exit(1);
+		}
 		
 		graphDb = new EmbeddedGraphDatabase( DB_BASE );
         userIndex = graphDb.index().forNodes( "authors" );
@@ -95,41 +99,101 @@ public class AuthorIterate {
 		
 		getBlogs();
 		
+		printStats();
+		
+        shutdown();
+    }
+
+	public static void printStats() throws Exception 
+	{
+
+		int blogsTotal = 0;
+		
 		Transaction tx = graphDb.beginTx();
 		try {	
+			blogsTotal = blogIndex.query( BLOG_KEY , "*" ).size();
 			System.out.println("Neo4j Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
-			System.out.println("Neo4j Blogs:" + blogIndex.query( BLOG_KEY , "*" ).size());
-			System.out.println("Neo4j Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
+			System.out.println("Neo4j Blogs:" + blogsTotal);
 			System.out.println("Neo4j Posts:" + postIndex.query( POST_KEY , "*" ).size());
+			System.out.println("Neo4j Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
 			System.out.println("Neo4j Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
 			tx.success();
 		} finally {
 			tx.finish();
 		}
 		
-		System.out.println( "MongoDB Posts: " + collPosts.getCount() );	
-		System.out.println( "MongoDB Blogs Filled: " + collPosts.distinct("blogID").size() );
-		System.out.println( "MongoDB Comments: " + collPosts.distinct("comments.commentID").size() );
-		System.out.println( "MongoDB Tags: " + collPosts.distinct("tags").size() );
-		System.out.println( "MongoDB Users Posted: " + collPosts.distinct("authorID").size() );
+		QueryBuilder query = new QueryBuilder();
+		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();	
 		
-        shutdown();
-    }
+		int blogsActive = collPosts.distinct("blogID").size();
+		int blogsLive = collPosts.distinct("blogID", docQuery).size();
+		int blogsLonely = blogsActive - blogsLive;
+		
+		String mapBlogs =	"function(){ " +
+							"	emit( this.blogID , { count : 1 , comments : this.comments.length} ); "+
+							"};";							
+		
+        String reduceAvg = "function( key , values ){ "+
+							"	var totPosts = 0; var totCom = 0; " +
+							"	for ( var i=0; i<values.length; i++ ) {"+
+							"		totPosts += values[i].count; "+
+							"		totCom += values[i].comments; "+
+							"   } " +
+							"	return { posts: totPosts, comments: totCom, avg: totCom/totPosts } ; "+
+							"};";
+		
+        MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
+		DBCollection collResult = output.getOutputCollection();
 
-	public static void getBlogs() throws Exception {
+		QueryBuilder mpQuery = new QueryBuilder();
+		DBObject mpDoc = query.start("value.avg").greaterThanEquals(1).get();
+		
+		long blogsPop = collResult.getCount(mpDoc);
+		int blogsInactive = blogsTotal - blogsActive;
+		
+		String sql = "UPDATE blogStats SET " +
+					"total = " + blogsTotal + "," +
+					"active = " + blogsActive + "," +
+					"inactive = " + blogsInactive + "," +
+					"live = " + blogsLive + ", " +
+					"popular = " + blogsPop + ", " +
+					"lonely = " + blogsLonely + " LIMIT 1";	
+		myStm.executeUpdate(sql);
+		
+		System.out.println(">>> Blogs Inactive: " + blogsInactive );
+		
+		System.out.println("Mongo Users Posted: " + collPosts.distinct("authorID").size() );
+		
+		System.out.println("Mongo Blogs Filled: " + blogsActive );
+		System.out.println("Mongo Blogs With Comments: " + blogsLive );
+		System.out.println("Mongo Blogs Empty Comments: " + blogsLonely );
+		System.out.println("Mongo Blogs Popular: " + blogsPop );
+		
+		System.out.println("Mongo Posts: " + collPosts.getCount() );	
+		System.out.println("Mongo Tags: " + collPosts.distinct("tags").size() );
+		
+	
+	}
+	
+	public static void getBlogs() throws Exception 
+	{
 
 		ResultSet rs = null;
 		String[] blogs = null;
-
-		for(int j = 0 ; j <= 10000; j++)
+		String profileID = "";
+		int j = 0;
+		
+		while(true)
 		{
-			
 			blogs = null;
-			myStm.executeQuery("SELECT blogs FROM author WHERE Local = 'BR' and length(Blogs) > 2 ORDER BY profileID LIMIT "+ j +",1");
+			myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY degree DESC LIMIT 1");
 			rs = myStm.getResultSet();
 			if (rs!=null) {
 				rs.next();
 				blogs = Pattern.compile(",").split(rs.getString("blogs"));
+				profileID = rs.getString("profileID");
+			} else {
+				break;
 			}
 		
 			if (blogs==null) continue;
@@ -138,9 +202,7 @@ public class AuthorIterate {
 				Transaction tx = graphDb.beginTx();
 				try {
 					String blogID = blog.trim().replace("http:","").replace("/","");
-					//System.out.println(blogID);
 					if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
-						//System.out.println(blogID);
 						if (getPosts(blogID)) {
 							//Blog Index only to store visited blogs
 							Node blogNode = graphDb.createNode();
@@ -153,6 +215,14 @@ public class AuthorIterate {
 					tx.finish();
 				}
 			}
+
+			try {
+				myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
+			} catch (Exception e) {
+				mysqlConn = DriverManager.getConnection(myConnString);
+				myStm = mysqlConn.createStatement();
+			}
+			
 			
 			if ((j%10)==0) {
 				Transaction tx = graphDb.beginTx();	
@@ -168,6 +238,7 @@ public class AuthorIterate {
 				if (isExit()) break;
 			}
 			
+			j++;
 		}
 		
 	}
@@ -194,7 +265,12 @@ public class AuthorIterate {
 				
 				Integer count = 0;
 				for (Entry entry : resultFeed.getEntries()) {
-					String postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+					String postID = "";
+					try {
+						postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+					} catch (Exception e) {
+						break;
+					}
 					if (entry.getAuthors().get(0).getUri()!=null && postIndex.get( POST_KEY, postID).size()==0) {
 					
 						setMongoPost(entry);
@@ -228,9 +304,12 @@ public class AuthorIterate {
 				return false;
 			} catch (IOException e) {
 				System.out.println("IOException!");
-				return false;
+				return true;
 			} catch (ServiceException e) {
 				System.out.println("Service Exception!");
+				return true;
+			} catch (Exception e) {
+				System.out.println("Some Error!");
 				return true;
 			} finally {
 				tx.finish();
@@ -379,7 +458,7 @@ public class AuthorIterate {
 	{
 		if (node.hasProperty(AUTHOR_KEY)) {
 			myStm.executeUpdate("INSERT INTO author SET profileID = '" + node.getProperty(AUTHOR_KEY) + "'");
-			int size = relationSize(node.getRelationships(RelTypes.Comments, Direction.BOTH));
+			int size = IteratorUtil.count(node.getRelationships(RelTypes.Comments, Direction.BOTH));
 			myStm.executeUpdate("UPDATE author SET degree = " + size + " WHERE profileID = '" + node.getProperty(AUTHOR_KEY) + "' LIMIT 1");
 		}
 	}
@@ -402,12 +481,12 @@ public class AuthorIterate {
 		Boolean hasRelation = false;
 		for ( Relationship relationship : AuthorNode.getRelationships( RelTypes.Tags, Direction.OUTGOING ) )
 			if (hasRelation = relationship.getEndNode().equals(TagNode)) {
-				int Weight = ((Integer)relationship.getProperty("Weight")).intValue();
-				relationship.setProperty("Weight", Weight+1);
+				double Weight = Double.parseDouble(relationship.getProperty("Weight").toString());
+				relationship.setProperty("Weight", Weight+1d);
 			}
 		if (!hasRelation) {
 			Relationship relationship = AuthorNode.createRelationshipTo(TagNode, RelTypes.Tags);
-			relationship.setProperty("Weight", 1);
+			relationship.setProperty("Weight", 1d);
 		}
     }
 	
@@ -418,13 +497,13 @@ public class AuthorIterate {
 			Boolean hasRelation = false;
 			for ( Relationship relationship : CommentNode.getRelationships( RelTypes.Comments, Direction.OUTGOING ) )
                 if (hasRelation = relationship.getEndNode().equals(AuthorNode)) {
-					int Weight = ((Integer)relationship.getProperty("Weight")).intValue();
-					relationship.setProperty("Weight", Weight+1);
+					double Weight = Double.parseDouble(relationship.getProperty("Weight").toString());
+					relationship.setProperty("Weight", Weight+1d);
 					commentIndex.add(relationship , COMMENT_KEY, Uri);
 				}
 			if (!hasRelation) {
 				Relationship relationship = CommentNode.createRelationshipTo(AuthorNode, RelTypes.Comments);
-				relationship.setProperty("Weight", 1);
+				relationship.setProperty("Weight", 1d);
 				commentIndex.add(relationship , COMMENT_KEY, Uri);
 			}
 		}

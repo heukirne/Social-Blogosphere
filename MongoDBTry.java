@@ -27,6 +27,7 @@ public class MongoDBTry {
 		collPosts = mongoDb.getCollection("posts");
 		collPosts.ensureIndex("postID");
 		collPosts.ensureIndex("blogID");				
+		collPosts.ensureIndex("authorID");
 
 		registerShutdownHook();
 		
@@ -51,25 +52,35 @@ public class MongoDBTry {
 							"			); "+
 							"		} "+
 							"	); "+
+							"};";	
+
+		String mapBlogs =	"function(){ " +
+							"	emit( this.authorID , { count : 1 , comments : this.comments.length} ); "+
 							"};";							
 		
-        String reduceDefault = "function( key , values ){ "+
-							"	var total = 0; " +
-							"	for ( var i=0; i<values.length; i++ ) "+
-							"		total += values[i].count; "+
-							"	return { count : total }; "+
+        String reduceAvg = "function( key , values ){ "+
+							"	var posts = 0; var totCom = 0; " +
+							"	for ( var i=0; i<values.length; i++ ) {"+
+							"		posts += values[i].count; "+
+							"		totCom += values[i].comments; "+
+							"   } " +
+							"	return Math.round(totCom/posts); "+
 							"};";
 		
-		BasicDBObject doc = new BasicDBObject();
-		doc.put("blogID", "3942129895874784210");
+
 		
-		System.out.println("Posts: " + collPosts.count(doc));
+		QueryBuilder query = new QueryBuilder();
+		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();		
 		
-        MapReduceOutput output = collPosts.mapReduce(mapContent, reduceDefault, null, MapReduceCommand.OutputType.INLINE, doc);
-		int cont=0;
-		for (DBObject mapReduceObject : output.results()) {
-            System.out.println(mapReduceObject);
-        }
+        MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "temp", MapReduceCommand.OutputType.REDUCE, docQuery);
+		DBCollection collResult = output.getOutputCollection();
+
+		QueryBuilder mpQuery = new QueryBuilder();
+		DBObject mpDoc = query.start("value").greaterThanEquals(2).get();
+		
+		long blogsPop = collResult.getCount(mpDoc);
+		
+		output.drop();
 		
         shutdown();
     }

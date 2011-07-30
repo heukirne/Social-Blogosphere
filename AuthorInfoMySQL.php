@@ -1,14 +1,21 @@
 <?php
+function normalize($name) {
+	$a = 'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûýýþÿ/]%#"?[^'; 
+	$b = 'AAAAAAACEEEEIIIIDNOOOOOOUUUUYbsaaaaaaaceeeeiiiidnoooooouuuyyby........'; 		
+	$string = utf8_decode($name);     
+	$string = strtr($string, $a, $b); 
+	return utf8_encode($string); 
+}
+
 // Google don't like flood requests
 // 231 days for 2 million users profile page each 10s
-require('blogger.php');
 $getAuthorInfo = "http://www.blogger.com/profile/";
 $propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
-$link = mysql_connect('localhost', 'root', '');
-mysql_select_db('blogs');
+$link = mysql_connect('localhost', 'gemeos110', 'none');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
 }
+mysql_select_db('gemeos110');
 mysql_query("set wait_timeout = 7200");
 
 $iA=0;
@@ -18,8 +25,8 @@ while (true) {
 	$iA++;
 	//echo ($iA).", ";
 	
-	$sql = "SELECT profileID as id FROM author WHERE Find = 0 and Local = 'BR' ORDER BY RAND() LIMIT 1";
-	//$sql = "SELECT profileID as id FROM author WHERE Find = 0 ORDER BY degree DESC LIMIT 1";
+	$sql = "SELECT profileID as id FROM author WHERE Find = 0 and Local = 'BR' and popLevel !=0 ORDER BY RAND() LIMIT 1";
+	$sql = "SELECT profileID as id FROM author WHERE Find = 0 ORDER BY popLevel DESC, degree DESC LIMIT 1";
 	$result = mysql_query($sql);
 	if ($result) {
 		$num_rows = mysql_num_rows($result);
@@ -28,6 +35,9 @@ while (true) {
 		if ($num_rows==0) break;
 	} else {
 		echo "\n".mysql_error()."\n";
+		sleep(20);
+		mysql_select_db('gemeos110');
+		mysql_query("set wait_timeout = 7200");
 		continue;
 	}	
 	
@@ -41,7 +51,7 @@ while (true) {
 			if (strpos($name,':')) {
 				$name = str_replace(':','',$name);
 				$name = str_replace(' ','_',$name);
-				$name = Blogger::normalize($name);
+				$name = normalize($name);
 				$prop[$name] = trim($listItens[3][$i])?$listItens[3][$i]:$listItens[4][$i];
 			}
 		if (!empty($prop)) {
@@ -52,7 +62,7 @@ while (true) {
 				//if (strpos($value,'loc1')) preg_match("/loc1=(\w*)/",$value,$result);
 				//if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
 				if (strpos($value,'loc0')) preg_match("/loc0=(\w{2})/",$value,$result);
-				$prop[$i] = Blogger::normalize((empty($result))?$value:$result[1]);
+				$prop[$i] = normalize((empty($result))?$value:$result[1]);
 			}
 		} 
 			
@@ -79,7 +89,6 @@ while (true) {
 		if (strpos($erroHandle['message'],'503')) {
 			echo "#";
 		}
-		
 	}
 	//echo $sql;
 	mysql_query($sql);

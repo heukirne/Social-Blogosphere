@@ -18,7 +18,7 @@ import java.text.Normalizer;
 public class Author2MySQL {
  
     private static final String DB_BASE = "base/neo4j";
-	private static final String myConnString = "jdbc:mysql://mysql1314.locaweb.com.br/gemeos110?user=gemeos110&password=dias09ufrgs";
+	private static final String myConnString = "jdbc:mysql://localhost/gemeos110?user=gemeos110&password=dias09ufrgs";
     private static GraphDatabaseService graphDb;
     private static Index<Node> userIndex; 
 	private static Connection mysqlConn;
