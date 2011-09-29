@@ -29,8 +29,8 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String myConnString = "jdbc:mysql://localhost/gemeos110?user=gemeos110&password=dias09ufrgs";
-	private static final String DB_BASE = "base/neo4j";
+	private static final String myConnString = "jdbc:mysql://localhost/blog?user=root&password=";
+	private static final String DB_BASE = "../base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
 	private static final String TAG_KEY = "term";
@@ -97,7 +97,7 @@ public class AuthorIterate {
 		commentIndex = graphDb.index().forRelationships( "comments" );
 		registerShutdownHook();
 		
-		getBlogs();
+		//getBlogs();
 		
 		printStats();
 		

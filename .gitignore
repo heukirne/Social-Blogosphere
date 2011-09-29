@@ -1,9 +1,10 @@
-
-/demoIndex.php
-*.bat
-*.graphml
-/var
-*.class
+/Class
 /lib
 /base
 *.7z
+.DS_Store
+MongoDBTry
+MongoStart
+Neo4J2GraphML
+
+AuthorIterate

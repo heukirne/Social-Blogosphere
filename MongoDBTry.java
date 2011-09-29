@@ -54,8 +54,9 @@ public class MongoDBTry {
 							"	); "+
 							"};";	
 
-		String mapBlogs =	"function(){ " +
-							"	emit( this.authorID , { count : 1 , comments : this.comments.length} ); "+
+		String mapAuthor =	"function(){ " +
+							" if (this.content) " +
+							"	if (this.content.indexOf('politica')>0) { emit( this.authorID , this.comments.length ); } "+
 							"};";							
 		
         String reduceAvg = "function( key , values ){ "+
@@ -66,21 +67,40 @@ public class MongoDBTry {
 							"   } " +
 							"	return Math.round(totCom/posts); "+
 							"};";
+
+        String reduceAuthor = "function( key , values ){ "+
+							"	var totCom = 0; " +
+							"	for ( var i=0; i<values.length; i++ ) {"+
+							"		totCom += values[i]; "+
+							"   } " +
+							"	return totCom; "+
+							"};";							
 		
 
 		
 		QueryBuilder query = new QueryBuilder();
-		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();		
+		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).and("content").notEquals("").get();		
 		
-        MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "temp", MapReduceCommand.OutputType.REDUCE, docQuery);
+		
+        MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "atuhorComp", MapReduceCommand.OutputType.REPLACE, docQuery);
 		DBCollection collResult = output.getOutputCollection();
+		
+		//DBCollection collResult = mongoDb.getCollection("atuhorComp");
 
 		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = query.start("value").greaterThanEquals(2).get();
+		DBObject mpDoc = query.start("value").greaterThanEquals(10).get();
 		
-		long blogsPop = collResult.getCount(mpDoc);
-		
-		output.drop();
+		BasicDBObject sortDoc = new BasicDBObject();
+        sortDoc.put("value", -1);
+
+		DBCursor cur = collResult.find(mpDoc).sort(sortDoc);
+
+        while(cur.hasNext()) {
+            System.out.println(cur.next());
+            break;
+        }
+
+		//output.drop();
 		
         shutdown();
     }
