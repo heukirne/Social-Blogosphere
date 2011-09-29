@@ -29,7 +29,7 @@ public class AuthorIterate {
  
 	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
     private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String myConnString = "jdbc:mysql://localhost/blog?user=root&password=";
+	private static final String myConnString = "jdbc:mysql://143.54.12.117/bloganalysis?user=myself&password=myself";
 	private static final String DB_BASE = "../base/neo4j";
 	private static final String AUTHOR_KEY = "profileId";
 	private static final String COMMENT_KEY = "link";
@@ -65,7 +65,7 @@ public class AuthorIterate {
 	
     public static void main(String[] args) throws Exception {		
 	
-		mongoConn = new Mongo( "localhost" , 27017 );
+		mongoConn = new Mongo( "localhost" , 12345 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -97,9 +97,9 @@ public class AuthorIterate {
 		commentIndex = graphDb.index().forRelationships( "comments" );
 		registerShutdownHook();
 		
-		//getBlogs();
+		getBlogs();
 		
-		printStats();
+		//printStats();
 		
         shutdown();
     }
@@ -107,8 +107,8 @@ public class AuthorIterate {
 	public static void printStats() throws Exception 
 	{
 
-		int blogsTotal = 0;
-		
+                int blogsTotal = 0;
+
 		Transaction tx = graphDb.beginTx();
 		try {	
 			blogsTotal = blogIndex.query( BLOG_KEY , "*" ).size();
@@ -122,34 +122,33 @@ public class AuthorIterate {
 			tx.finish();
 		}
 		
-		QueryBuilder query = new QueryBuilder();
-		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();	
-		
-		int blogsActive = collPosts.distinct("blogID").size();
-		int blogsLive = collPosts.distinct("blogID", docQuery).size();
-		int blogsLonely = blogsActive - blogsLive;
-		
 		String mapBlogs =	"function(){ " +
-							"	emit( this.blogID , { count : 1 , comments : this.comments.length} ); "+
-							"};";							
+				"	emit( this.blogID , this.comments.length ); "+
+				"};";							
 		
         String reduceAvg = "function( key , values ){ "+
-							"	var totPosts = 0; var totCom = 0; " +
-							"	for ( var i=0; i<values.length; i++ ) {"+
-							"		totPosts += values[i].count; "+
-							"		totCom += values[i].comments; "+
-							"   } " +
-							"	return { posts: totPosts, comments: totCom, avg: totCom/totPosts } ; "+
+			"	var totPosts = values.length; var totCom = 0; " +
+			"	for ( var i=0; i<values.length; i++ ) {"+
+			"		totCom += values[i]; "+
+			"   } " +
+			"	return { posts: totPosts, comments: totCom, avg: totCom/totPosts } ; "+
 							"};";
 		
         MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
 		DBCollection collResult = output.getOutputCollection();
 
 		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = query.start("value.avg").greaterThanEquals(1).get();
-		
+		DBObject mpDoc = mpQuery.start("value.avg").greaterThanEquals(1).get();
+	
+                QueryBuilder query = new QueryBuilder();
+                DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();
+
+                long blogsActive = collResult.getCount();
+                int blogsLive = collPosts.distinct("blogID", docQuery).size();
+                int blogsLonely = (int)blogsActive - blogsLive;
+
 		long blogsPop = collResult.getCount(mpDoc);
-		int blogsInactive = blogsTotal - blogsActive;
+		int blogsInactive = blogsTotal - (int)blogsActive;
 		
 		String sql = "UPDATE blogStats SET " +
 					"total = " + blogsTotal + "," +
@@ -162,7 +161,7 @@ public class AuthorIterate {
 		
 		System.out.println(">>> Blogs Inactive: " + blogsInactive );
 		
-		System.out.println("Mongo Users Posted: " + collPosts.distinct("authorID").size() );
+		//System.out.println("Mongo Users Posted: " + collPosts.distinct("authorID").size() );
 		
 		System.out.println("Mongo Blogs Filled: " + blogsActive );
 		System.out.println("Mongo Blogs With Comments: " + blogsLive );
@@ -170,7 +169,7 @@ public class AuthorIterate {
 		System.out.println("Mongo Blogs Popular: " + blogsPop );
 		
 		System.out.println("Mongo Posts: " + collPosts.getCount() );	
-		System.out.println("Mongo Tags: " + collPosts.distinct("tags").size() );
+		//System.out.println("Mongo Tags: " + collPosts.distinct("tags").size() );
 		
 	
 	}

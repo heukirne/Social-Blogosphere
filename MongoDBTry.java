@@ -56,7 +56,10 @@ public class MongoDBTry {
 
 		String mapAuthor =	"function(){ " +
 							" if (this.content) " +
-							"	if (this.content.indexOf('politica')>0) { emit( this.authorID , this.comments.length ); } "+
+							"	if (this.content.indexOf('futebol')>0) { "+
+							"		var comAuthor = '';"+
+							"		this.comments.forEach ( function (comment) { comAuthor += comment.authorID + ','; } );"+
+							"		emit( this.authorID , comAuthor ); } "+
 							"};";							
 		
         String reduceAvg = "function( key , values ){ "+
@@ -69,7 +72,7 @@ public class MongoDBTry {
 							"};";
 
         String reduceAuthor = "function( key , values ){ "+
-							"	var totCom = 0; " +
+							"	var totCom = ''; " +
 							"	for ( var i=0; i<values.length; i++ ) {"+
 							"		totCom += values[i]; "+
 							"   } " +
@@ -81,29 +84,72 @@ public class MongoDBTry {
 		QueryBuilder query = new QueryBuilder();
 		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).and("content").notEquals("").get();		
 		
-		
+		/*
         MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "atuhorComp", MapReduceCommand.OutputType.REPLACE, docQuery);
 		DBCollection collResult = output.getOutputCollection();
-		
-		//DBCollection collResult = mongoDb.getCollection("atuhorComp");
+		*/
+		DBCollection collResult = mongoDb.getCollection("atuhorComp");
 
 		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = query.start("value").greaterThanEquals(10).get();
+		DBObject mpDoc = query.start("value").notEquals(new BasicDBList()).get();
 		
 		BasicDBObject sortDoc = new BasicDBObject();
         sortDoc.put("value", -1);
 
-		DBCursor cur = collResult.find(mpDoc).sort(sortDoc);
+		Writer output = null;
+		File file = new File("wordCommunity.graphml");
+		output = new BufferedWriter(new FileWriter(file));  
+		
+		output.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+		output.write("<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\">\n");
+		output.write("<key attr.name=\"network\" attr.type=\"int\" for=\"node\" id=\"network\"/>\n");
+		output.write("<graph edgedefault=\"directed\">\n");
 
+		Map<String, String[]> authorFrequency = new HashMap<String, String[]>();
+
+		int contCur = 0;
+		String[] arComments = null;
+		DBCursor cur = collResult.find().sort(sortDoc);
         while(cur.hasNext()) {
-            System.out.println(cur.next());
-            break;
+        	DBObject obj = cur.next();
+        	arComments = obj.get("value").toString().split(",");
+        	authorFrequency.put(obj.get("_id").toString(), arComments);
+
+        	for (String id : arComments) {
+        		output.write("<edge source=\"" + id + "\" target=\"" + obj.get("_id").toString() + "\" />\n");
+        	}
         }
 
-		//output.drop();
+		cur = collResult.find().sort(sortDoc);
+        while(cur.hasNext()) {
+        	DBObject obj = cur.next();
+			output.write("<node id=\"" + obj.get("_id").toString() + "\" >\n");
+			output.write("<data key=\"network\">" + sumArray(authorFrequency, obj.get("_id").toString()) + "</data>\n");
+			output.write("</node>\n");	
+		}
+
+		output.write("</graph>\n");
+		output.write("</graphml>");
+		
+		output.close();
 		
         shutdown();
     }
+
+	private static int sumArray(Map<String, String[]> listAr, String id) {
+    	int sum = 0;
+    	for (String idC : listAr.get(id)) {
+            String[] value = listAr.get(idC);
+            if (value == null) {
+                sum += 1;
+            } else {
+                sum += value.length;
+            }
+    		
+    	}
+    	return sum;
+	}
+
     private static void shutdown()
     {
 		System.out.println( "Shutting down database ..." );
