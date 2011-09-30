@@ -10,9 +10,6 @@ import com.google.gdata.client.blogger.BloggerService;
 import com.google.gdata.data.*;
 import com.google.gdata.util.ServiceException;
 
-import net.sf.json.JSONObject;
-import net.sf.json.JSONArray;
-
 import java.sql.SQLException;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -27,45 +24,39 @@ import java.text.Normalizer;
  
 public class AuthorIterate {
  
-	private static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
-    private static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
-	private static final String myConnString = "jdbc:mysql://143.54.12.117/bloganalysis?user=myself&password=myself";
-	private static final String DB_BASE = "../base/neo4j";
-	private static final String AUTHOR_KEY = "profileId";
-	private static final String COMMENT_KEY = "link";
-	private static final String TAG_KEY = "term";
-	private static final String POST_KEY = "post";
-	private static final String BLOG_KEY = "blog";
-	private static final String PROP_KEY = "info";
-    private static GraphDatabaseService graphDb;
-	private static GraphDatabaseService readonlyDb;
-    private static Index<Node> userIndex; 
-	private static Index<Node> tagIndex; 
-	private static Index<Node> postIndex;
-	private static Index<Node> blogIndex;
-	private static Index<Node> propertyIndex;
-	private static Index<Relationship> commentIndex; 
-	private static Node dummyNode;
-	private static Mongo mongoConn;
-	private static DB mongoDb;
-	private static DBCollection collPosts;
-	private static Connection mysqlConn;
-	private static Statement myStm;
+	public static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
+    public static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
+	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
+	public static final String DB_BASE = "../base/neo4j";
+	public static final String AUTHOR_KEY = "profileId";
+	public static final String COMMENT_KEY = "link";
+	public static final String TAG_KEY = "term";
+	public static final String POST_KEY = "post";
+	public static final String BLOG_KEY = "blog";
+	public static final String PROP_KEY = "info";
+    public static GraphDatabaseService graphDb;
+	public static GraphDatabaseService readonlyDb;
+    public static Index<Node> userIndex; 
+	public static Index<Node> tagIndex; 
+	public static Index<Node> postIndex;
+	public static Index<Node> blogIndex;
+	public static Index<Node> propertyIndex;
+	public static Index<Relationship> commentIndex; 
+	public static Node dummyNode;
+	public static Mongo mongoConn;
+	public static DB mongoDb;
+	public static DBCollection collPosts;
+	public static Connection mysqlConn;
+	public static Statement myStm;
  
-     private static enum RelTypes implements RelationshipType
+    public static enum RelTypes implements RelationshipType
     {
         Comments, Tags, Property
     }
-
-	 public static int relationSize(Iterable<Relationship> iterable) {
-		int cont = 0;
-		for (Relationship relation : iterable) cont++;
-		return cont;
-	  }
 	
     public static void main(String[] args) throws Exception {		
 	
-		mongoConn = new Mongo( "localhost" , 12345 );
+		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -74,16 +65,18 @@ public class AuthorIterate {
 			System.out.println("MongoDB Offline.");
 			System.exit(1);
 		}
-		
+
 		collPosts = mongoDb.getCollection("posts");
 		collPosts.ensureIndex("postID");
 		collPosts.ensureIndex("blogID");
 		collPosts.ensureIndex("authorID");		
 		
+		mongoConn.close();
+
 		try {
-		mysqlConn = DriverManager.getConnection(myConnString);
-		myStm = mysqlConn.createStatement();
-		myStm.executeQuery("set wait_timeout = 7200");
+			mysqlConn = DriverManager.getConnection(myConnString);
+			myStm = mysqlConn.createStatement();
+			myStm.executeQuery("set wait_timeout = 7200");
 		} catch (Exception e) {
 			System.out.println("MySQL Offline.");
 			System.exit(1);
@@ -99,93 +92,25 @@ public class AuthorIterate {
 		
 		getBlogs();
 		
-		//printStats();
-		
         shutdown();
     }
-
-	public static void printStats() throws Exception 
-	{
-
-                int blogsTotal = 0;
-
-		Transaction tx = graphDb.beginTx();
-		try {	
-			blogsTotal = blogIndex.query( BLOG_KEY , "*" ).size();
-			System.out.println("Neo4j Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
-			System.out.println("Neo4j Blogs:" + blogsTotal);
-			System.out.println("Neo4j Posts:" + postIndex.query( POST_KEY , "*" ).size());
-			System.out.println("Neo4j Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
-			System.out.println("Neo4j Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
-			tx.success();
-		} finally {
-			tx.finish();
-		}
-		
-		String mapBlogs =	"function(){ " +
-				"	emit( this.blogID , this.comments.length ); "+
-				"};";							
-		
-        String reduceAvg = "function( key , values ){ "+
-			"	var totPosts = values.length; var totCom = 0; " +
-			"	for ( var i=0; i<values.length; i++ ) {"+
-			"		totCom += values[i]; "+
-			"   } " +
-			"	return { posts: totPosts, comments: totCom, avg: totCom/totPosts } ; "+
-							"};";
-		
-        MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
-		DBCollection collResult = output.getOutputCollection();
-
-		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = mpQuery.start("value.avg").greaterThanEquals(1).get();
-	
-                QueryBuilder query = new QueryBuilder();
-                DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();
-
-                long blogsActive = collResult.getCount();
-                int blogsLive = collPosts.distinct("blogID", docQuery).size();
-                int blogsLonely = (int)blogsActive - blogsLive;
-
-		long blogsPop = collResult.getCount(mpDoc);
-		int blogsInactive = blogsTotal - (int)blogsActive;
-		
-		String sql = "UPDATE blogStats SET " +
-					"total = " + blogsTotal + "," +
-					"active = " + blogsActive + "," +
-					"inactive = " + blogsInactive + "," +
-					"live = " + blogsLive + ", " +
-					"popular = " + blogsPop + ", " +
-					"lonely = " + blogsLonely + " LIMIT 1";	
-		myStm.executeUpdate(sql);
-		
-		System.out.println(">>> Blogs Inactive: " + blogsInactive );
-		
-		//System.out.println("Mongo Users Posted: " + collPosts.distinct("authorID").size() );
-		
-		System.out.println("Mongo Blogs Filled: " + blogsActive );
-		System.out.println("Mongo Blogs With Comments: " + blogsLive );
-		System.out.println("Mongo Blogs Empty Comments: " + blogsLonely );
-		System.out.println("Mongo Blogs Popular: " + blogsPop );
-		
-		System.out.println("Mongo Posts: " + collPosts.getCount() );	
-		//System.out.println("Mongo Tags: " + collPosts.distinct("tags").size() );
-		
-	
-	}
 	
 	public static void getBlogs() throws Exception 
 	{
 
+		final int numCrawler = 2;
+		Crawler[] crawler = new Crawler[numCrawler];
+
 		ResultSet rs = null;
 		String[] blogs = null;
 		String profileID = "";
-		int j = 0;
-		
+		int j = 1;
+		int contCrawler = 0;
+
 		while(true)
 		{
 			blogs = null;
-			myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY degree DESC LIMIT 1");
+			myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY degree DESC LIMIT " + (contCrawler+1) + ",1");
 			rs = myStm.getResultSet();
 			if (rs!=null) {
 				rs.next();
@@ -196,32 +121,17 @@ public class AuthorIterate {
 			}
 		
 			if (blogs==null) continue;
-			for (String blog : blogs)
-			{
-				Transaction tx = graphDb.beginTx();
-				try {
-					String blogID = blog.trim().replace("http:","").replace("/","");
-					if (blogIndex.get( BLOG_KEY, blogID).size()==0) {
-						if (getPosts(blogID)) {
-							//Blog Index only to store visited blogs
-							Node blogNode = graphDb.createNode();
-							blogNode.setProperty( BLOG_KEY, blogID);
-							blogIndex.add(blogNode, BLOG_KEY, blogID);
-						} 
-					}
-					tx.success();
-				} finally {
-					tx.finish();
-				}
-			}
 
-			try {
-				myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
-			} catch (Exception e) {
-				mysqlConn = DriverManager.getConnection(myConnString);
-				myStm = mysqlConn.createStatement();
+			//Better implement a BlockingQueue
+			crawler[contCrawler] = new Crawler(profileID, blogs);
+			crawler[contCrawler].start();
+			contCrawler++;
+
+			if (contCrawler >= crawler.length) {
+				for (int i=0; i<contCrawler; i++) 
+					crawler[i].join();
+				contCrawler = 0;
 			}
-			
 			
 			if ((j%10)==0) {
 				Transaction tx = graphDb.beginTx();	
@@ -242,11 +152,114 @@ public class AuthorIterate {
 		
 	}
 	
-	public static Boolean getPosts(final String blogUri) throws ServiceException, IOException {
+	private static Boolean isExit() {
+		File file = new File("AuthorIterateExit.txt");
+		StringBuffer contents = new StringBuffer();
+		BufferedReader reader = null;
+		
+		 
+		try {
+			String text = null;
+			reader = new BufferedReader(new FileReader(file));
+			 
+			while ((text = reader.readLine()) != null) {
+				contents.append(text);
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (reader != null) {
+				reader.close();
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		int intExit = Integer.parseInt(contents.toString());
+		if (intExit==1)
+			return true;
+		else
+			return false;
+	}
+	
+    private static void shutdown()
+    {
+		System.out.println( "Shutting down database ..." );
+        graphDb.shutdown();
+		try {
+			myStm.close();
+		} catch (Exception ex) {}
+    }
+	
+    private static void registerShutdownHook()
+    {
+        Runtime.getRuntime().addShutdownHook( new Thread()
+        {
+            @Override
+            public void run()
+            {
+                shutdown();
+            }
+        } );
+    }
+}
+
+class Crawler extends Thread {
+
+	private String[] blogs;
+	private String profileID;
+
+	private Mongo mongoConn;
+	private DB mongoDb;
+	private DBCollection collPosts;	
+
+    Crawler(final String profileID, final String[] blogs) throws Exception {
+    	this.profileID = profileID;
+        this.blogs = blogs;
+    }
+    public void run() {
+    	try {
+		
+			mongoConn = new Mongo( "localhost" , 27017 );
+			mongoDb = mongoConn.getDB( "blogdb" );
+			collPosts = mongoDb.getCollection("posts");
+
+    		for (String blog : this.blogs)
+			{
+				Transaction tx = AuthorIterate.graphDb.beginTx();
+				try {
+					String blogID = blog.trim().replace("http:","").replace("/","");
+					if (AuthorIterate.blogIndex.get( AuthorIterate.BLOG_KEY, blogID).size()==0) {
+						if (getPosts(blogID)) {
+							//Blog Index only to store visited blogs
+							Node blogNode = AuthorIterate.graphDb.createNode();
+							blogNode.setProperty( AuthorIterate.BLOG_KEY, blogID);
+							AuthorIterate.blogIndex.add(blogNode, AuthorIterate.BLOG_KEY, blogID);
+						} 
+					}
+					tx.success();
+				} finally {
+					tx.finish();
+				}
+			}
+			AuthorIterate.myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + this.profileID + "' LIMIT 1");
+		
+		} catch (Exception ex) {
+		} finally {
+			mongoConn.close();
+		}
+		
+    }
+
+	private Boolean getPosts(final String blogUri) throws ServiceException, IOException {
 			
 			System.out.print("Retriving:" + blogUri);			
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
-			Transaction tx = graphDb.beginTx();
+			Transaction tx = AuthorIterate.graphDb.beginTx();
 			
 			try {
 				URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogUri + "/posts/default");
@@ -270,7 +283,7 @@ public class AuthorIterate {
 					} catch (Exception e) {
 						break;
 					}
-					if (entry.getAuthors().get(0).getUri()!=null && postIndex.get( POST_KEY, postID).size()==0) {
+					if (entry.getAuthors().get(0).getUri()!=null && AuthorIterate.postIndex.get( AuthorIterate.POST_KEY, postID).size()==0) {
 					
 						setMongoPost(entry);
 						count++; System.out.print("," + count);	
@@ -284,9 +297,9 @@ public class AuthorIterate {
 								TagRelation(tag, commentNode);
 						}
 						//Post Index only to store visited posts
-						Node postNode = graphDb.createNode();
-						postNode.setProperty( POST_KEY, postID);
-						postIndex.add(postNode, POST_KEY, postID);
+						Node postNode = AuthorIterate.graphDb.createNode();
+						postNode.setProperty( AuthorIterate.POST_KEY, postID);
+						AuthorIterate.postIndex.add(postNode, AuthorIterate.POST_KEY, postID);
 					}
 				}
 				
@@ -308,18 +321,18 @@ public class AuthorIterate {
 				System.out.println("Service Exception!");
 				return true;
 			} catch (Exception e) {
-				System.out.println("Some Error!");
+				System.out.println(e.getMessage());
 				return true;
 			} finally {
 				tx.finish();
 			}
 	}
 	
-	public static ArrayList<Node> getComments(final String postUri) throws ServiceException, IOException {
+	private ArrayList<Node> getComments(final String postUri) throws ServiceException, IOException {
 			//System.out.print(" " + postUri + ",");
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			ArrayList<Node> ArrNodes = new ArrayList<Node>();
-			Transaction tx = graphDb.beginTx();
+			Transaction tx = AuthorIterate.graphDb.beginTx();
 			try {
 				URL feedUrl = new URL("http://www.blogger.com/feeds/" + postUri + "/comments/default");
 				Query myQuery = new Query(feedUrl);
@@ -359,7 +372,7 @@ public class AuthorIterate {
 			}
 	}
 	
-	private static void setMongoPost(Entry entry) {
+	private void setMongoPost(Entry entry) {
 		
 		BasicDBObject doc = new BasicDBObject();
 
@@ -401,7 +414,7 @@ public class AuthorIterate {
 		
 	}
 	
-	private static void setMongoComment(String postUri, Entry entry) {
+	private void setMongoComment(String postUri, Entry entry) {
 
 		BasicDBObject doc = new BasicDBObject();
 		
@@ -441,217 +454,89 @@ public class AuthorIterate {
 	
 	}
 	
-    private static Node createAuthorNode( final String profileID ) throws Exception
+    private Node createAuthorNode( final String profileID ) throws Exception
     {
-        if (userIndex.get( AUTHOR_KEY, profileID).size()==0) {
-			Node node = graphDb.createNode();
-			node.setProperty( AUTHOR_KEY, profileID);
-			userIndex.add( node, AUTHOR_KEY, profileID);
+        if (AuthorIterate.userIndex.get( AuthorIterate.AUTHOR_KEY, profileID).size()==0) {
+			Node node = AuthorIterate.graphDb.createNode();
+			node.setProperty( AuthorIterate.AUTHOR_KEY, profileID);
+			AuthorIterate.userIndex.add( node, AuthorIterate.AUTHOR_KEY, profileID);
 			return node;
 		} else {
-			return userIndex.get( AUTHOR_KEY, profileID).getSingle();
+			return AuthorIterate.userIndex.get( AuthorIterate.AUTHOR_KEY, profileID).getSingle();
 		}
     }	
 	
-	private static void updateDegree(Node node) throws Exception
+	private void updateDegree(Node node) throws Exception
 	{
-		if (node.hasProperty(AUTHOR_KEY)) {
-			myStm.executeUpdate("INSERT INTO author SET profileID = '" + node.getProperty(AUTHOR_KEY) + "'");
-			int size = IteratorUtil.count(node.getRelationships(RelTypes.Comments, Direction.BOTH));
-			myStm.executeUpdate("UPDATE author SET degree = " + size + " WHERE profileID = '" + node.getProperty(AUTHOR_KEY) + "' LIMIT 1");
+		if (node.hasProperty(AuthorIterate.AUTHOR_KEY)) {
+			AuthorIterate.myStm.executeUpdate("INSERT INTO author SET profileID = '" + node.getProperty(AuthorIterate.AUTHOR_KEY) + "'");
+			int size = IteratorUtil.count(node.getRelationships(AuthorIterate.RelTypes.Comments, Direction.BOTH));
+			AuthorIterate.myStm.executeUpdate("UPDATE author SET degree = " + size + " WHERE profileID = '" + node.getProperty(AuthorIterate.AUTHOR_KEY) + "' LIMIT 1");
 		}
 	}
 	
-    private static Node TagNode( final String Term )
+    private Node TagNode( final String Term )
     {
-        if (tagIndex.get( TAG_KEY, Term).size()==0) {
-			Node node = graphDb.createNode();
-			node.setProperty( TAG_KEY, Term);
-			tagIndex.add( node, TAG_KEY, Term);
+        if (AuthorIterate.tagIndex.get( AuthorIterate.TAG_KEY, Term).size()==0) {
+			Node node = AuthorIterate.graphDb.createNode();
+			node.setProperty( AuthorIterate.TAG_KEY, Term);
+			AuthorIterate.tagIndex.add( node, AuthorIterate.TAG_KEY, Term);
 			return node;
 		} else {
-			return tagIndex.get( TAG_KEY, Term).getSingle();
+			return AuthorIterate.tagIndex.get( AuthorIterate.TAG_KEY, Term).getSingle();
 		}
     }	
 	
-    private static void TagRelation( final Node TagNode, final Node AuthorNode)
+    private void TagRelation( final Node TagNode, final Node AuthorNode)
     {
 		//System.out.println("+ " + TagNode.getProperty(TAG_KEY) );
 		Boolean hasRelation = false;
-		for ( Relationship relationship : AuthorNode.getRelationships( RelTypes.Tags, Direction.OUTGOING ) )
+		for ( Relationship relationship : AuthorNode.getRelationships( AuthorIterate.RelTypes.Tags, Direction.OUTGOING ) )
 			if (hasRelation = relationship.getEndNode().equals(TagNode)) {
 				double Weight = Double.parseDouble(relationship.getProperty("Weight").toString());
 				relationship.setProperty("Weight", Weight+1d);
 			}
 		if (!hasRelation) {
-			Relationship relationship = AuthorNode.createRelationshipTo(TagNode, RelTypes.Tags);
+			Relationship relationship = AuthorNode.createRelationshipTo(TagNode, AuthorIterate.RelTypes.Tags);
 			relationship.setProperty("Weight", 1d);
 		}
     }
 	
-    private static void CommentRelation( final Node CommentNode, final Node AuthorNode, final String Uri )
+    private void CommentRelation( final Node CommentNode, final Node AuthorNode, final String Uri )
     {
 		//System.out.println("+ " + CommentNode.getProperty(AUTHOR_KEY) + "\t" + Uri );
-        if (!CommentNode.equals(AuthorNode) && commentIndex.get( COMMENT_KEY, Uri).size()==0) {
+        if (!CommentNode.equals(AuthorNode) && AuthorIterate.commentIndex.get( AuthorIterate.COMMENT_KEY, Uri).size()==0) {
 			Boolean hasRelation = false;
-			for ( Relationship relationship : CommentNode.getRelationships( RelTypes.Comments, Direction.OUTGOING ) )
+			for ( Relationship relationship : CommentNode.getRelationships( AuthorIterate.RelTypes.Comments, Direction.OUTGOING ) )
                 if (hasRelation = relationship.getEndNode().equals(AuthorNode)) {
 					double Weight = Double.parseDouble(relationship.getProperty("Weight").toString());
 					relationship.setProperty("Weight", Weight+1d);
-					commentIndex.add(relationship , COMMENT_KEY, Uri);
+					AuthorIterate.commentIndex.add(relationship , AuthorIterate.COMMENT_KEY, Uri);
 				}
 			if (!hasRelation) {
-				Relationship relationship = CommentNode.createRelationshipTo(AuthorNode, RelTypes.Comments);
+				Relationship relationship = CommentNode.createRelationshipTo(AuthorNode, AuthorIterate.RelTypes.Comments);
 				relationship.setProperty("Weight", 1d);
-				commentIndex.add(relationship , COMMENT_KEY, Uri);
+				AuthorIterate.commentIndex.add(relationship , AuthorIterate.COMMENT_KEY, Uri);
 			}
 		}
     }	
 	
-    private static void PropertyRelation( final String Property, final Node AuthorNode)
+    private void PropertyRelation( final String Property, final Node AuthorNode)
     {
-		Node PropertyNode =  propertyIndex.get( PROP_KEY, Property).getSingle();
+		Node PropertyNode =  AuthorIterate.propertyIndex.get( AuthorIterate.PROP_KEY, Property).getSingle();
         if (PropertyNode==null) {
-			PropertyNode = graphDb.createNode();
-			PropertyNode.setProperty( PROP_KEY, Property);
-			propertyIndex.add( PropertyNode, PROP_KEY, Property);
+			PropertyNode = AuthorIterate.graphDb.createNode();
+			PropertyNode.setProperty( AuthorIterate.PROP_KEY, Property);
+			AuthorIterate.propertyIndex.add( PropertyNode, AuthorIterate.PROP_KEY, Property);
 		}
 	
 		Boolean hasRelation = false;
-		for ( Relationship relationship : AuthorNode.getRelationships( RelTypes.Property, Direction.OUTGOING ) )
+		for ( Relationship relationship : AuthorNode.getRelationships( AuthorIterate.RelTypes.Property, Direction.OUTGOING ) )
 			if (relationship.getEndNode().equals(PropertyNode))
 				hasRelation = true;
 			
 		if (!hasRelation) {
-			Relationship relationship = AuthorNode.createRelationshipTo(PropertyNode, RelTypes.Property);
+			Relationship relationship = AuthorNode.createRelationshipTo(PropertyNode, AuthorIterate.RelTypes.Property);
 		}
-    }
-	
-    private static String GremlinExecute(String script) throws Exception
-    {
-		String GremlinURI = SERVER_ROOT_URI + "ext/GremlinPlugin/graphdb/execute_script";
-
-		// Send data
-		URLConnection urlConnection = new URL(GremlinURI).openConnection();
-		
-		urlConnection.setDoOutput(true);
-		urlConnection.setDoInput(true);
-		//urlConnection.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
-		urlConnection.setRequestProperty("Accept", "application/json");
-		
-		OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream());
-		wr.write(URLEncoder.encode("script", "UTF-8") + "=" + URLEncoder.encode(script, "UTF-8"));
-		wr.flush();
-
-		// Get the response
-		BufferedReader rd = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-		String line;
-		String json = "";
-		while ((line = rd.readLine()) != null) {
-			json += line;
-		}
-		wr.close();
-		rd.close();
-		
-		return json;
-	}
-	
-    private static JSONObject GremlinNode(String script) throws Exception
-    {
-		String json = GremlinExecute(script);
-	
-		json = json.replace("[ {","{").replace("} ]","}");
-		return JSONObject.fromObject(json);
-	}
-	
-	private static ResultSet querySQL(final String sql) throws Exception
-	{
-		Boolean bExec = true;
-		while (bExec) {
-			try {	
-				myStm.executeQuery(sql);
-				bExec = false;
-			} catch (SQLException ex){ 
-				bExec = false;
-			} catch (Exception ex){ 
-				System.out.println("<Reconnect MySQL>"); 
-				mysqlConn = DriverManager.getConnection(myConnString);
-				myStm = mysqlConn.createStatement();
-			}
-		}
-		return myStm.getResultSet();
-	}
-	
-	private static void updateSQL(final String sql) throws Exception
-	{
-		Boolean bExec = true;
-		while (bExec) {
-			try {	
-				myStm.executeUpdate(sql);
-				bExec = false;
-			} catch (SQLException ex){ 
-				bExec = false;
-			} catch (Exception ex){ 
-				System.out.println("<Reconnect MySQL>"); 
-				mysqlConn = DriverManager.getConnection(myConnString);
-				myStm = mysqlConn.createStatement();
-			}
-		}
-	}
-	
-	private static Boolean isExit() {
-		File file = new File("AuthorIterateExit.txt");
-		StringBuffer contents = new StringBuffer();
-		BufferedReader reader = null;
-		
-		 
-		try {
-			String text = null;
-			reader = new BufferedReader(new FileReader(file));
-			 
-			while ((text = reader.readLine()) != null) {
-				contents.append(text);
-			}
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				if (reader != null) {
-				reader.close();
-				}
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-
-		int intExit = Integer.parseInt(contents.toString());
-		if (intExit==1)
-			return true;
-		else
-			return false;
-	}
-	
-    private static void shutdown()
-    {
-		System.out.println( "Shutting down database ..." );
-        graphDb.shutdown();
-		mongoConn.close();
-		try {
-			myStm.close();
-		} catch (Exception ex) {}
-    }
-	
-    private static void registerShutdownHook()
-    {
-        Runtime.getRuntime().addShutdownHook( new Thread()
-        {
-            @Override
-            public void run()
-            {
-                shutdown();
-            }
-        } );
     }
 }
