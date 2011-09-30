@@ -20,6 +20,8 @@ import java.text.Normalizer;
 public class MongoIterate {
  
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
+	public static final int mongoPort = 27017;
+	public static final String mongoHost = "localhost";
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -28,7 +30,7 @@ public class MongoIterate {
 	
     public static void main(String[] args) throws Exception {		
 
-		mongoConn = new Mongo( "localhost" , 27017 );
+		mongoConn = new Mongo( mongoHost , mongoPort );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -162,7 +164,7 @@ class CrawlerM extends Thread {
     public void run() {
     	try {
 		
-			mongoConn = new Mongo( "localhost" , 27017 );
+			mongoConn = new Mongo( MongoIterate.mongoHost , MongoIterate.mongoPort );
 			mongoDb = mongoConn.getDB( "blogdb" );
 			collPosts = mongoDb.getCollection("posts");
 
@@ -325,7 +327,11 @@ class CrawlerM extends Thread {
 			
 			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
 			comment.put("authorID", authorID);
-			
+
+			try {
+				MongoIterate.myStm.executeUpdate("INSERT INTO author SET profileID = '" + authorID + "'");
+			} catch (Exception e) { }
+
 			Date published = new Date(entry.getPublished().getValue());
 			comment.put("published", published);
 			
