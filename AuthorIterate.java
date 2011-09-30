@@ -55,7 +55,7 @@ public class AuthorIterate {
     }
 	
     public static void main(String[] args) throws Exception {		
-	
+
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
@@ -98,7 +98,7 @@ public class AuthorIterate {
 	public static void getBlogs() throws Exception 
 	{
 
-		final int numCrawler = 2;
+		final int numCrawler = 1;
 		Crawler[] crawler = new Crawler[numCrawler];
 
 		ResultSet rs = null;
@@ -122,7 +122,7 @@ public class AuthorIterate {
 		
 			if (blogs==null) continue;
 
-			//Better implement a BlockingQueue
+			//Better implement a BlockingQueue or Thread Pool Pattern
 			crawler[contCrawler] = new Crawler(profileID, blogs);
 			crawler[contCrawler].start();
 			contCrawler++;
@@ -321,7 +321,7 @@ class Crawler extends Thread {
 				System.out.println("Service Exception!");
 				return true;
 			} catch (Exception e) {
-				System.out.println(e.getMessage());
+				System.out.println("Error:" + e.getMessage());
 				return true;
 			} finally {
 				tx.finish();
