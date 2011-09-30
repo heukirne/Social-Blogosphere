@@ -1,0 +1,19 @@
+#!/bin/sh
+trap exit ERR
+
+BASEDIR=`dirname $0`/.
+BASEDIR=`(cd "$BASEDIR"; pwd)`
+
+NAME=`basename $0`
+
+REPO="$BASEDIR"/lib	
+
+
+CLASSPATH=$CLASSPATH_PREFIX:"$REPO"/*:"$REPO"/gdata/*
+
+javac -d "$BASEDIR"/Class -classpath "$CLASSPATH" "$BASEDIR"/"$NAME".java
+
+echo "COMPILED"
+
+cd "$BASEDIR"/Class
+java  -Dbasedir="$BASEDIR" -classpath "$CLASSPATH" "$NAME"

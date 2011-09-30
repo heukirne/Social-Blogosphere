@@ -11,9 +11,15 @@ public class MongoDBTry {
 	private static Mongo mongoConn;
 	private static DB mongoDb;
 	private static DBCollection collPosts;
+	private static Map<String, MutableInteger> authorDegree;
 	
     public static void main(String[] args) throws Exception {		
 	
+        if (args.length != 1) {
+            System.out.println("Usage: java WordFrequency inputWord");
+            System.exit(1);
+        }
+
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
@@ -105,7 +111,7 @@ public class MongoDBTry {
 		output.write("<key attr.name=\"network\" attr.type=\"int\" for=\"node\" id=\"network\"/>\n");
 		output.write("<graph edgedefault=\"directed\">\n");
 
-		Map<String, String[]> authorFrequency = new HashMap<String, String[]>();
+		authorDegree = new HashMap<String, MutableInteger>();
 
 		int contCur = 0;
 		String[] arComments = null;
@@ -113,19 +119,24 @@ public class MongoDBTry {
         while(cur.hasNext()) {
         	DBObject obj = cur.next();
         	arComments = obj.get("value").toString().split(",");
-        	authorFrequency.put(obj.get("_id").toString(), arComments);
 
         	for (String id : arComments) {
-        		output.write("<edge source=\"" + id + "\" target=\"" + obj.get("_id").toString() + "\" />\n");
+        		if (!obj.get("_id").toString().equals(id)) {
+        			output.write("<edge source=\"" + id + "\" target=\"" + obj.get("_id").toString() + "\" />\n");
+        			incAuthor(id);
+        			incAuthor(obj.get("_id").toString());
+        		}
         	}
         }
 
 		cur = collResult.find().sort(sortDoc);
         while(cur.hasNext()) {
         	DBObject obj = cur.next();
-			output.write("<node id=\"" + obj.get("_id").toString() + "\" >\n");
-			output.write("<data key=\"network\">" + sumArray(authorFrequency, obj.get("_id").toString()) + "</data>\n");
-			output.write("</node>\n");	
+        	if (authorDegree.containsKey(obj.get("_id").toString())) {
+				output.write("<node id=\"" + obj.get("_id").toString() + "\" >\n");
+				output.write("<data key=\"network\">" + authorDegree.get(obj.get("_id").toString()).intValue() + "</data>\n");
+				output.write("</node>\n");	
+			}
 		}
 
 		output.write("</graph>\n");
@@ -136,19 +147,14 @@ public class MongoDBTry {
         shutdown();
     }
 
-	private static int sumArray(Map<String, String[]> listAr, String id) {
-    	int sum = 0;
-    	for (String idC : listAr.get(id)) {
-            String[] value = listAr.get(idC);
-            if (value == null) {
-                sum += 1;
-            } else {
-                sum += value.length;
-            }
-    		
-    	}
-    	return sum;
-	}
+    private static void incAuthor(String id) {
+        MutableInteger value = authorDegree.get(id);
+        if (value == null) {    // Create new entry with count of 1.
+            authorDegree.put(id, new MutableInteger(1));
+        } else {                // Increment existing count by 1.
+            value.inc();
+        }
+    }
 
     private static void shutdown()
     {
@@ -166,5 +172,24 @@ public class MongoDBTry {
                 shutdown();
             }
         } );
+    }
+}
+
+class MutableInteger {
+    private int m_value;
+    
+    /** Constructor */
+    public MutableInteger(int value) {
+        m_value = value;
+    }
+    
+    /** Return int value. */
+    public int intValue() {
+        return m_value;
+    }
+    
+    /** Increment value */
+    public void inc() {
+        m_value++;
     }
 }

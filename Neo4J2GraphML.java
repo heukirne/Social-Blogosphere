@@ -280,7 +280,7 @@ public class Neo4J2GraphML {
 		output.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
 		output.write("<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\">\n");
 		output.write("<key attr.name=\"weight\" attr.type=\"double\" for=\"edge\" id=\"weight\"/>\n");
-		//output.write("<key attr.name=\"indegree\" attr.type=\"int\" for=\"node\" id=\"indegree\"/>\n");
+		output.write("<key attr.name=\"indegree\" attr.type=\"int\" for=\"node\" id=\"indegree\"/>\n");
 		output.write("<graph edgedefault=\"directed\">\n");
 
 		int contNodes = 0;
