@@ -16,6 +16,7 @@ import java.util.*;
 import java.net.*;
 import java.io.*;
 import java.text.Normalizer;
+import java.text.SimpleDateFormat;
  
 public class MongoIterate {
  
@@ -65,11 +66,11 @@ public class MongoIterate {
 	public static void getBlogs() throws Exception 
 	{
 
-		final int numCrawler = 4;
+		final int numCrawler = 1;
 		CrawlerM[] crawler = new CrawlerM[numCrawler];
 
 		ResultSet rs = null;
-		String[] blogs = null;
+		String[] blogs;
 		String profileID = "";
 		int contCrawler = 0;
 
@@ -90,6 +91,8 @@ public class MongoIterate {
 			if (blogs==null) continue;
 
 			//Better implement a BlockingQueue or Thread Pool Pattern
+			//String[] blogID = { "4552278855309032175" };
+			//blogs = blogsS;
 			crawler[contCrawler] = new CrawlerM(profileID, blogs);
 			crawler[contCrawler].start();
 			contCrawler++;
@@ -187,35 +190,71 @@ class CrawlerM extends Thread {
 			System.out.print("Retriving:" + blogUri);			
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			
+			SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
+
 			try {
 				URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogUri + "/posts/default");
 				if (!blogUri.matches("\\d+")) {
 					feedUrl = new URL("http://" + blogUri + "/feeds/posts/default");
 				} 
+
 				Query myQuery = new Query(feedUrl);
-				//myQuery.setStartIndex(1);
 				DateTime dtMin = DateTime.parseDate("2011-01-01");
-				myQuery.setPublishedMin(dtMin);
-				myQuery.setMaxResults(25);
+				myQuery.setPublishedMin(dtMin);	
+
+				if (blogUri.matches("\\d+")) {
+					BasicDBObject doc = new BasicDBObject();
+					doc.put("blogID", blogUri);
+					BasicDBObject sortDoc = new BasicDBObject();
+			        
+			        System.out.println("Size:"+ collPosts.find(doc).size());
+
+			        if (collPosts.find(doc).size() > 0) {
+			        	sortDoc.put("published", -1);
+						DBCursor cur = collPosts.find(doc).sort(sortDoc);
+				        if(cur.hasNext()) {
+				        	DBObject obj = cur.next();
+				        	System.out.println(formatter.format(obj.get("published")));
+				        	dtMin = new DateTime((Date)obj.get("published"));
+				        	myQuery.setPublishedMin(dtMin);	
+				        }
+			        }
+
+			        //if (true) return;
+				}
+
 				Feed resultFeed = myService.query(myQuery, Feed.class);
 				
 				String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
 				
 				Integer count = 0;
-				for (Entry entry : resultFeed.getEntries()) {
-					String postID = "";
-					try {
-						postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
-					} catch (Exception e) {
-						break;
-					}
-					if (entry.getAuthors().get(0).getUri()!=null) {
-					
-						setMongoPost(entry);
-						count++; System.out.print("," + count);	
+
+				System.out.println("Results: "+ resultFeed.getTotalResults());
+
+				if (true) return;
+
+				while (resultFeed.getTotalResults() > 1) {
+
+					for (Entry entry : resultFeed.getEntries()) {
+						String postID = "";
+						try {
+							postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
+						} catch (Exception e) {
+							break;
+						}
+						if (entry.getAuthors().get(0).getUri()!=null) {
 						
-						getComments(postID);
+							setMongoPost(entry);
+							count++; 
+							System.out.print("," + count);	
+							
+							getComments(postID);
+						}
 					}
+
+					myQuery.setStartIndex(count);
+					resultFeed = myService.query(myQuery, Feed.class);
+
 				}
 				
 				System.out.print("\n");
@@ -225,9 +264,9 @@ class CrawlerM extends Thread {
 			} catch (IOException e) {
 				System.out.println("IOException!");
 			} catch (ServiceException e) {
-				System.out.println("Service Exception!");
+				System.out.println("Service Exception: "+ e.getMessage());
 			} catch (Exception e) {
-				System.out.println("getPostsEx:" + e.getMessage());
+				System.out.println("getPostsEx: " + e.getMessage());
 			}
 	}
 	
@@ -256,9 +295,9 @@ class CrawlerM extends Thread {
 			} catch (IOException e) {
 				System.out.println("IOException!");
 			} catch (ServiceException e) {
-				System.out.println("Service Exception!");
+				System.out.println("Service Exception: "+ e.getMessage());
 			} catch (Exception e) {
-				System.out.println("getCommentsEx:" + e.getMessage());
+				System.out.println("getCommentsEx: " + e.getMessage());
 			}
 	}
 	
