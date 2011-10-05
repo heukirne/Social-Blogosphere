@@ -71,8 +71,10 @@ QueryBuilder query = new QueryBuilder();
 DBObject docMin = query.start("comments").notEquals(new BasicDBList()).get();
 DBObject docPop = query.start("value.avg").greaterThanEquals(1).get();
 
-//MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, docMin);
-MapReduceOutput output = collPosts.mapReduce(mapCountBlogs, reduceCountBlogs, "blogCount", MapReduceCommand.OutputType.REPLACE, null);
+//MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", docMin);
+//output.getOutputCollection().rename("blogStats",true); //Workaround for Mongo 1.6.3
+//MapReduceOutput output2 = collPosts.mapReduce(mapCountBlogs, reduceCountBlogs, "blogCount", null);
+//output2.getOutputCollection().rename("blogCount",true);
 
 	DBCollection collBlogCount = mongoDb.getCollection("blogCount");
 	DBCollection collResult = mongoDb.getCollection("blogStats");
