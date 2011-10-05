@@ -23,7 +23,6 @@ public class MongoIterate {
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
 	public static final int mongoPort = 27017;
 	public static final String mongoHost = "localhost";
-	public static final int skipInt = 0;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -122,7 +121,10 @@ public class MongoIterate {
 		QueryBuilder query = new QueryBuilder();
 		DBObject docUnset = query.start("dot").notEquals(1).and("value").greaterThanEquals(20).get();
 
-		DBCursor cur = collBlogs.find(docUnset).skip(skipInt);
+		Random generator = new Random();
+		int r = generator.nextInt(collBlogs.find(docUnset).size());
+
+		DBCursor cur = collBlogs.find(docUnset).skip(r);
 		DBObject obj = null ;
         if(cur.hasNext()) 
          	obj = cur.next();
