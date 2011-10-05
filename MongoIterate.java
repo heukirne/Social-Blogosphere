@@ -23,6 +23,7 @@ public class MongoIterate {
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
 	public static final int mongoPort = 27017;
 	public static final String mongoHost = "localhost";
+	public static final int skipInt = 0;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -59,6 +60,8 @@ public class MongoIterate {
 
 		System.out.println("Number Posts: " + collPosts.getCount());
 
+		Thread.sleep(500); 
+
 		mongoConn.close();
         myStm.close();
     }
@@ -78,30 +81,27 @@ public class MongoIterate {
 		{
 			blogs = null;
 			profileID = "";
-			myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY degree DESC LIMIT " + (contCrawler+1) + ",1");
+			//myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
 			if (rs!=null) {
 				rs.next();
 				blogs = Pattern.compile(",").split(rs.getString("blogs"));
 				profileID = rs.getString("profileID");
 			} else {
-				break;
+				blogs = getBlogFromMongo();
+				profileID = "0";
 			}
 		
 			if (blogs==null) continue;
 
 			//Better implement a BlockingQueue or Thread Pool Pattern
-			//String[] blogID = { "4552278855309032175" };
-			//blogs = blogsS;
 			crawler[contCrawler] = new CrawlerM(profileID, blogs);
 			crawler[contCrawler].start();
 			contCrawler++;
 
 			if (contCrawler >= crawler.length) {
-				for (int i=0; i<contCrawler; i++) {
+				for (int i=0; i<contCrawler; i++)
 					crawler[i].join();
-					myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + crawler[i].profileID + "' LIMIT 1");
-				}
 
 				contCrawler = 0;
 
@@ -115,6 +115,25 @@ public class MongoIterate {
 		
 	}
 	
+	private static String[] getBlogFromMongo() {
+
+		DBCollection collBlogs = mongoDb.getCollection("blogCount");
+
+		QueryBuilder query = new QueryBuilder();
+		DBObject docUnset = query.start("dot").notEquals(1).and("value").greaterThanEquals(20).get();
+
+		DBCursor cur = collBlogs.find(docUnset).skip(skipInt);
+		DBObject obj = null ;
+        if(cur.hasNext()) 
+         	obj = cur.next();
+
+
+		String[] blogID = { obj.get("_id").toString() };
+		
+		return blogID;
+
+	}
+
 	private static Boolean isExit() {
 		File file = new File("AuthorIterateExit.txt");
 		StringBuffer contents = new StringBuffer();
@@ -154,7 +173,8 @@ public class MongoIterate {
 class CrawlerM extends Thread {
 
 	private String[] blogs;
-	public String profileID;
+	private String profileID;
+
 
 	private Mongo mongoConn;
 	private DB mongoDb;
@@ -170,13 +190,29 @@ class CrawlerM extends Thread {
 			mongoConn = new Mongo( MongoIterate.mongoHost , MongoIterate.mongoPort );
 			mongoDb = mongoConn.getDB( "blogdb" );
 			collPosts = mongoDb.getCollection("posts");
+			boolean bOk, bSet = true;
 
-    		for (String blog : this.blogs)
+    		for (String blog : blogs)
 			{
 				String blogID = blog.trim().replace("http:","").replace("/","");
-				getPosts(blogID);
+				bOk = getPosts(blogID);
+				if (!bOk) bSet = bOk;
+				else {
+					if (blog.matches("\\d+")) {
+						DBCollection collBlogs = mongoDb.getCollection("blogCount");
+						BasicDBObject docId = new BasicDBObject();
+				        docId.put("_id", blog);
+
+						DBObject obj = collBlogs.findOne(docId);
+						obj.put("dot",1);
+				        collBlogs.save(obj);
+					}
+				}
 			}
-		
+
+			if (bSet) {
+				MongoIterate.myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
+			}
 			mongoConn.close();
 
 		} catch (Exception e) {
@@ -185,9 +221,9 @@ class CrawlerM extends Thread {
 		
     }
 
-	private void getPosts(final String blogUri) throws ServiceException, IOException {
+	private boolean getPosts(final String blogUri) throws ServiceException, IOException {
 			
-			System.out.print("Retriving:" + blogUri);			
+			System.out.print(">>" + blogUri);			
 			BloggerService myService = new BloggerService("exampleCo-exampleApp-1");
 			
 			SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
@@ -206,34 +242,34 @@ class CrawlerM extends Thread {
 					BasicDBObject doc = new BasicDBObject();
 					doc.put("blogID", blogUri);
 					BasicDBObject sortDoc = new BasicDBObject();
-			        
-			        System.out.println("Size:"+ collPosts.find(doc).size());
+			        sortDoc.put("published", -1);
 
 			        if (collPosts.find(doc).size() > 0) {
-			        	sortDoc.put("published", -1);
 						DBCursor cur = collPosts.find(doc).sort(sortDoc);
 				        if(cur.hasNext()) {
+				        	Date dateChange = formatter.parse("2011-10-03"); //Change Crawler Date
 				        	DBObject obj = cur.next();
-				        	System.out.println(formatter.format(obj.get("published")));
 				        	dtMin = new DateTime((Date)obj.get("published"));
-				        	myQuery.setPublishedMin(dtMin);	
+							if (collPosts.find(doc).size() > 30 || dateChange.compareTo((Date)obj.get("published")) < 0) 
+							    myQuery.setPublishedMin(dtMin);
 				        }
 			        }
 
-			        //if (true) return;
 				}
 
 				Feed resultFeed = myService.query(myQuery, Feed.class);
 				
 				String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
 				
-				Integer count = 0;
+				int count = 1;
+				int size = resultFeed.getTotalResults();
 
-				System.out.println("Results: "+ resultFeed.getTotalResults());
+				System.out.print("("+size+")");
 
-				if (true) return;
-
-				while (resultFeed.getTotalResults() > 1) {
+				do {
+					
+					myQuery.setStartIndex(count);
+					if (count>1) resultFeed = myService.query(myQuery, Feed.class);
 
 					for (Entry entry : resultFeed.getEntries()) {
 						String postID = "";
@@ -243,30 +279,30 @@ class CrawlerM extends Thread {
 							break;
 						}
 						if (entry.getAuthors().get(0).getUri()!=null) {
-						
+							System.out.print("," + count +"{");
 							setMongoPost(entry);
-							count++; 
-							System.out.print("," + count);	
-							
 							getComments(postID);
+							System.out.print("}");
+							count++; 
 						}
 					}
 
-					myQuery.setStartIndex(count);
-					resultFeed = myService.query(myQuery, Feed.class);
-
-				}
+				} while (count < size);
 				
 				System.out.print("\n");
-
+				return true;
 			} catch (MalformedURLException e) {
 				System.out.println("Malformed URL Exception!");
+				return false;
 			} catch (IOException e) {
 				System.out.println("IOException!");
+				return false;
 			} catch (ServiceException e) {
 				System.out.println("Service Exception: "+ e.getMessage());
+				return false;
 			} catch (Exception e) {
 				System.out.println("getPostsEx: " + e.getMessage());
+				return false;
 			}
 	}
 	
@@ -280,15 +316,27 @@ class CrawlerM extends Thread {
 				myQuery.setMaxResults(25);
 				Feed resultFeed = myService.query(myQuery, Feed.class);
 
-				for (Entry entry : resultFeed.getEntries())
-				{
-					if (entry.getAuthors().get(0).getUri()!=null) {
-						String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
-						if (profileID.matches("\\d+")) {
-							setMongoComment(postUri, entry);
+				int count = 1;
+				int size = resultFeed.getTotalResults();
+				System.out.print(size+":");
+				do {
+					
+					myQuery.setStartIndex(count);
+					if (count>1) resultFeed = myService.query(myQuery, Feed.class);
+
+					for (Entry entry : resultFeed.getEntries())
+					{
+						if (entry.getAuthors().get(0).getUri()!=null) {
+							String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+							if (profileID.matches("\\d+")) {
+								setMongoComment(postUri, entry);
+							}
 						}
+						System.out.print(","+count);
+						count++; 
 					}
-				}
+
+				} while (count < size);
 
 			} catch (MalformedURLException e) {
 				System.out.println("Malformed URL Exception!");
