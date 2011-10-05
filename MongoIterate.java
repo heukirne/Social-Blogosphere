@@ -86,12 +86,14 @@ public class MongoIterate {
 			blogs = null;
 			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
-			if (rs.first()) {
-				blogs = Pattern.compile("#").split(rs.getString("info"));
-			} else {
-				blogs = getBlogFromMongo();
-			}
-		
+			try {
+				if (rs.first()) {
+					blogs = Pattern.compile("#").split(rs.getString("info"));
+				} else {
+					blogs = getBlogFromMongo();
+				}
+			} catch (Exception e) {}
+
 			if (blogs==null) continue;
 
 			if (queue.size() >= (numCrawler*2)) {
@@ -260,8 +262,8 @@ class CrawlerM extends Thread {
 				System.out.println("IOEx:"+ e.getMessage());
 			} catch (ServiceException e) {
 				System.out.println("ServcEx: "+ e.getMessage());
-				if (e.getMessage().matches("Bad.*")) bWhile = false;
-				if (e.getMessage().matches("Not Found.*")) bWhile = false;
+				if (e.getMessage().matches(".*Bad.*")) bWhile = false;
+				if (e.getMessage().matches(".*Not Found.*")) bWhile = false;
 			} catch (Exception e) {
 				System.out.println("feedEx: " + e.getMessage());
 			}
