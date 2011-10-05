@@ -24,7 +24,7 @@ public class MongoIterate {
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
 	public static final int mongoPort = 27017;
 	public static final String mongoHost = "localhost";
-	public static final int numCrawler = 4;
+	public static final int numCrawler = 1;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -80,26 +80,19 @@ public class MongoIterate {
 
 		ResultSet rs = null;
 		String[] blogs;
-		String profileID = "";
 
 		while(true)
 		{
 			blogs = null;
-			profileID = "";
-			//myStm.executeQuery("SELECT blogs, profileID FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
+			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
-			if (rs!=null) {
-				rs.next();
-				blogs = Pattern.compile(",").split(rs.getString("blogs"));
-				profileID = rs.getString("profileID");
+			if (rs.first()) {
+				blogs = Pattern.compile("#").split(rs.getString("info"));
 			} else {
 				blogs = getBlogFromMongo();
-				profileID = "0";
 			}
 		
 			if (blogs==null) continue;
-
-			queue.put(blogs);
 
 			if (queue.size() >= (numCrawler*2)) {
 
@@ -107,6 +100,8 @@ public class MongoIterate {
 				myStm.executeUpdate(sql);
 				if (isExit()) break;
 			}
+
+			queue.put(blogs);
 
 		}
 
@@ -176,8 +171,6 @@ public class MongoIterate {
 
 class CrawlerM extends Thread {
 
-	private String profileID = "0";
-
 	private BloggerService myService;
 	private Mongo mongoConn;
 	private DB mongoDb;
@@ -187,8 +180,6 @@ class CrawlerM extends Thread {
 
     CrawlerM(BlockingQueue<String[]> q) {
     	this.q = q;
-    	//this.profileID = profileID;
-        //this.blogs = blogs;
 		try {
 			Random generator = new Random();
 			int r = generator.nextInt(100);
@@ -208,11 +199,21 @@ class CrawlerM extends Thread {
     	while (true) {
 
 	    	try {
-				boolean bOk, bSet = true;  
-				String[] blogs = q.take();
+				boolean bOk = true, bSet = true;  
+				String[] info = q.take();
+				String[] blogs = null;
+				String profileID = "";
+
+				if (info.length == 2) {
+					profileID = info[0];
+					blogs = Pattern.compile(",").split(info[1]);
+				} else {
+					blogs = info;
+				}
 
 	    		for (String blog : blogs)
 				{
+
 					String blogID = blog.trim().replace("http:","").replace("/","");
 					bOk = getPosts(blogID);
 					if (!bOk) bSet = bOk;
@@ -260,6 +261,7 @@ class CrawlerM extends Thread {
 			} catch (ServiceException e) {
 				System.out.println("ServcEx: "+ e.getMessage());
 				if (e.getMessage().matches("Bad.*")) bWhile = false;
+				if (e.getMessage().matches("Not Found.*")) bWhile = false;
 			} catch (Exception e) {
 				System.out.println("feedEx: " + e.getMessage());
 			}
