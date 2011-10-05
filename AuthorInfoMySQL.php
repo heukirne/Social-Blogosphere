@@ -25,8 +25,7 @@ while (true) {
 	$iA++;
 	//echo ($iA).", ";
 	
-	$sql = "SELECT profileID as id FROM author WHERE Find = 0 and Local = 'BR' and popLevel !=0 ORDER BY RAND() LIMIT 1";
-	$sql = "SELECT profileID as id FROM author WHERE Find = 0 ORDER BY popLevel DESC, degree DESC LIMIT 1";
+	$sql = "SELECT profileID as id FROM author WHERE Find = 0 ORDER BY RAND() LIMIT 1";
 	$result = mysql_query($sql);
 	if ($result) {
 		$num_rows = mysql_num_rows($result);

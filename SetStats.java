@@ -1,8 +1,3 @@
-import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.index.*;
-import org.neo4j.kernel.*;
-import org.neo4j.helpers.collection.IteratorUtil;
-
 import com.mongodb.*;
 
 import java.sql.SQLException;
@@ -17,25 +12,7 @@ import java.io.*;
  
 public class SetStats {
  
-	public static final String SERVER_ROOT_URI = "http://localhost:7474/db/data/";
-    public static final String DB_BLOG = "D:/xampplite/neo4j/data/graph.db";
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
-	public static final String DB_BASE = "../base/neo4j";
-	public static final String AUTHOR_KEY = "profileId";
-	public static final String COMMENT_KEY = "link";
-	public static final String TAG_KEY = "term";
-	public static final String POST_KEY = "post";
-	public static final String BLOG_KEY = "blog";
-	public static final String PROP_KEY = "info";
-    public static GraphDatabaseService graphDb;
-	public static GraphDatabaseService readonlyDb;
-    public static Index<Node> userIndex; 
-	public static Index<Node> tagIndex; 
-	public static Index<Node> postIndex;
-	public static Index<Node> blogIndex;
-	public static Index<Node> propertyIndex;
-	public static Index<Relationship> commentIndex; 
-	public static Node dummyNode;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -68,56 +45,43 @@ public class SetStats {
 			System.exit(1);
 		}
 		
-		graphDb = new EmbeddedGraphDatabase( DB_BASE );
-        userIndex = graphDb.index().forNodes( "authors" );
-		tagIndex = graphDb.index().forNodes( "tags" );
-		postIndex = graphDb.index().forNodes( "posts" );
-		blogIndex = graphDb.index().forNodes( "blogs" );
-		commentIndex = graphDb.index().forRelationships( "comments" );
-		
-		registerShutdownHook();
-		
         int blogsTotal = 0;
 
-		Transaction tx = graphDb.beginTx();
-		try {	
-			blogsTotal = blogIndex.query( BLOG_KEY , "*" ).size();
-			System.out.println("Neo4j Users:" + userIndex.query( AUTHOR_KEY , "*" ).size() );
-			System.out.println("Neo4j Blogs:" + blogsTotal);
-			System.out.println("Neo4j Posts:" + postIndex.query( POST_KEY , "*" ).size());
-			System.out.println("Neo4j Tags:" + tagIndex.query( TAG_KEY , "*" ).size());
-			System.out.println("Neo4j Comments:" + commentIndex.query( COMMENT_KEY , "*" ).size());
-			tx.success();
-		} finally {
-			tx.finish();
-		}
-		
-		String mapBlogs =	"function(){ " +
-				"	emit( this.blogID , this.comments.length ); "+
-				"};";							
-		
-        String reduceAvg = "function( key , values ){ "+
-			"	var totPosts = values.length; var totCom = 0; " +
-			"	for ( var i=0; i<values.length; i++ ) {"+
-			"		totCom += values[i]; "+
-			"   } " +
-			"	return { posts: totPosts, comments: totCom, avg: totCom/totPosts } ; "+
-			"};";
-		
-        MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
-		DBCollection collResult = output.getOutputCollection();
+myStm.executeQuery("SELECT sum(1+length(blogs)-length(replace(blogs,',',''))) as cont FROM author WHERE length(blogs) > 5 and Local = 'BR' AND retrieve=1");
+ResultSet rs = myStm.getResultSet();
+rs.next();
+blogsTotal = rs.getInt("cont");
 
-		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = mpQuery.start("value.avg").greaterThanEquals(1).get();
+String mapBlogs =	"function(){ " +
+"	emit( this.blogID , this.comments.length ); "+
+"	};";							
+
+String mapCountBlogs = "function () { emit ( this.blogID, 1 ); };";
 	
-        QueryBuilder query = new QueryBuilder();
-        DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).get();
+String reduceAvg = "function( key , values ){ "+
+" var totCom = 0; " +
+" for ( var i=0; i<values.length; i++ ) {"+
+"	totCom += parseInt(values[i]); "+
+" } " +
+" return totCom; };";
 
-        long blogsActive = collResult.getCount();
-        int blogsLive = collPosts.distinct("blogID", docQuery).size();
-        int blogsLonely = (int)blogsActive - blogsLive;
+String reduceCountBlogs = "function( key, values ) { var tot=0; values.forEach(function(value) {tot+=value;}); return tot; };";
 
-		long blogsPop = collResult.getCount(mpDoc);
+QueryBuilder query = new QueryBuilder();
+DBObject docMin = query.start("comments").notEquals(new BasicDBList()).get();
+DBObject docPop = query.start("value.avg").greaterThanEquals(1).get();
+
+//MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", MapReduceCommand.OutputType.REPLACE, docMin);
+MapReduceOutput output = collPosts.mapReduce(mapCountBlogs, reduceCountBlogs, "blogCount", MapReduceCommand.OutputType.REPLACE, null);
+
+	DBCollection collBlogCount = mongoDb.getCollection("blogCount");
+	DBCollection collResult = mongoDb.getCollection("blogStats");
+
+        long blogsLive = collResult.getCount();
+	long blogsActive = collBlogCount.getCount();
+	long blogsLonely = blogsActive - blogsLive;
+
+		long blogsPop = collResult.getCount(docPop);
 		int blogsInactive = blogsTotal - (int)blogsActive;
 		
 		String sql = "UPDATE blogStats SET " +
@@ -127,7 +91,7 @@ public class SetStats {
 					"live = " + blogsLive + ", " +
 					"popular = " + blogsPop + ", " +
 					"lonely = " + blogsLonely + " LIMIT 1";	
-		myStm.executeUpdate(sql);
+		if (blogsActive!=0) myStm.executeUpdate(sql);
 		
 		System.out.println(">>> Blogs Inactive: " + blogsInactive );
 		
@@ -147,22 +111,10 @@ public class SetStats {
     private static void shutdown()
     {
 		System.out.println( "Shutting down database ..." );
-        graphDb.shutdown();
 		mongoConn.close();
 		try {
 			myStm.close();
 		} catch (Exception ex) {}
     }
 	
-    private static void registerShutdownHook()
-    {
-        Runtime.getRuntime().addShutdownHook( new Thread()
-        {
-            @Override
-            public void run()
-            {
-                shutdown();
-            }
-        } );
-    }
 }
