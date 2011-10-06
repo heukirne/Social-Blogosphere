@@ -36,40 +36,36 @@ public class PageRank {
 							"		idAuthor = this.authorID;"+
 							"		this.comments.forEach ( function (comment) { "+
 							"			if (comment.authorID!=idAuthor) {" +
-							"				emit ( comment.authorID , { pr:0 , out:1 ,  outL:[ idAuthor ] } ); " +
-							"				emit ( idAuthor , { pr:0.5 , out:0 , outL:[] } ); " +
+							"				emit ( comment.authorID , { pr:0 , outL:[ idAuthor ] } ); " +
 							"			}"+
 							"		} ); "+
 							"	} "+
 							"}; ";								
 
         String reduceAuthor = "function( key , values ){ "+
-							"	var result = { pr:0 , out:0 , outL:[] }; " +
+							"	var result = { pr:0.5 , outL:[] }; " +
 							"	values.forEach(function(value) {"+
-							"		result.pr += value.pr; "+
-							"		result.out += value.out; "+
 							"		result.outL = result.outL.concat(value.outL); "+
 							"   }); " +
-							"	if (result.out) result.pr = 0.5*100 / result.out; "+
 							"	return result; "+
 							"};";	
 							
+
 		String mapAuthor2 =	"function(){ " +
-							"	var prK = this.value.pr;"+
+							"	var prK = this.value.pr/this.value.outL.length;"+
 							"	this.value.outL.forEach ( function (value) { "+
-							"		emit ( value , { pr:prK , out:0 , outL:[] } ); " +
+							"		emit ( value , { pr:prK , outL:[] } ); " +
 							"	} ); "+
+							"	emit ( this._id , this.value );" +
 							"}; ";	
 							
 
         String reduceAuthor2 = "function( key , values ){ "+
-							"	var result = { pr:0 , out:0 , outL:[] }; " +
+							"	var result = { pr:0 , outL:[] }; " +
 							"	values.forEach(function(value) {"+
 							"		result.pr += value.pr; "+
-							"		result.out += value.out; "+
 							"		result.outL = result.outL.concat(value.outL); "+
 							"   }); " +
-							"	if (result.out) result.pr = result.pr / result.out; "+
 							"	return result; "+
 							"};";													
 		
@@ -77,36 +73,43 @@ public class PageRank {
 		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).and("content").notEquals("").get();		
 		
 		
-        MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE, docQuery);
-		DBCollection collResult = output.getOutputCollection();
-
+        //MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE, docQuery);
+		DBCollection collResult = mongoDb.getCollection("pageRank_1");
 
         MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
 		DBCollection collResult2 = output2.getOutputCollection();
-		
-		//DBCollection collResult = mongoDb.getCollection("top10authors");
 
 		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = query.start("value").greaterThan(50).get();
-		
+		DBObject mpDoc = query.start("value.pr").notEquals(100).get();
 		BasicDBObject sortDoc = new BasicDBObject();
         sortDoc.put("value.pr", -1);
+        
+        DBCursor cur = collResult2.find().sort(sortDoc).limit(10);
+        int hash = cursorInt(cur);
+		int hash2 = 0;
+		for (int i=0; i<10; i++) {
+	        output2 = collResult2.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
+			collResult2 = output2.getOutputCollection();
 
-		DBCursor cur = collResult.find().sort(sortDoc).limit(10);
-        while(cur.hasNext()) {
-        	DBObject obj = cur.next();
-        	System.out.println(obj.toString());
-        }
+	        cur = collResult2.find().sort(sortDoc).limit(10);
+	        hash2 = cursorInt(cur);
 
-        System.out.println("---------------------------------");
-
-		cur = collResult2.find().sort(sortDoc).limit(10);
-        while(cur.hasNext()) {
-        	DBObject obj = cur.next();
-        	System.out.println(obj.toString());
-        }
+	        if (hash == hash2) break;
+	        else hash = hash2;
+		}
 		
         shutdown();
+    }
+
+    private static int cursorInt(DBCursor cur) {
+        int sum = 0;
+        while(cur.hasNext()) {
+    		DBObject obj = cur.next();
+    		for(char num: obj.get("_id").toString().toCharArray() ) 
+    			sum += Character.getNumericValue(num);
+    	}	
+    	System.out.println(sum);
+    	return sum;
     }
 
     private static void shutdown()
