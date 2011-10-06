@@ -177,6 +177,7 @@ class CrawlerM extends Thread {
 	private Mongo mongoConn;
 	private DB mongoDb;
 	private DBCollection collPosts;	
+	private int r;
 
 	BlockingQueue<String[]> q;
 
@@ -184,10 +185,10 @@ class CrawlerM extends Thread {
     	this.q = q;
 		try {
 			Random generator = new Random();
-			int r = generator.nextInt(100);
+			r = generator.nextInt(100);
 
 			myService = new BloggerService("Mongo-BlogFeed-"+r);
-			myService.setReadTimeout(3000);
+			//myService.setReadTimeout(3000);
 
 			mongoConn = new Mongo( MongoIterate.mongoHost , MongoIterate.mongoPort );
 			mongoDb = mongoConn.getDB( "blogdb" );
@@ -237,33 +238,33 @@ class CrawlerM extends Thread {
 				}
 				
 			} catch (Exception e) {
-				System.out.println("runEx:" + e.getMessage());
+				System.out.println(r+"runEx:" + e.getMessage());
 			}
 
 			if (q.size() == 0) break;
 		}
 
+		System.out.println("Bye("+r+")";
 		mongoConn.close();
     }
 
     private Feed feedQuery(Query myQuery) {
     	
 		Feed resultFeed = new Feed();
-		boolean bWhile = true;
 
-		while (bWhile) {
+		for (int i=0; i<=3; i++) {
 			try {
 				Thread.sleep(100);
 				resultFeed = myService.query(myQuery, Feed.class);
-				bWhile = false;
+				break;
 			} catch (MalformedURLException e) {
 				System.out.println("MalformEx:"+ e.getMessage());
 			} catch (IOException e) {
 				System.out.println("IOEx:"+ e.getMessage());
 			} catch (ServiceException e) {
 				System.out.println("ServcEx: "+ e.getMessage());
-				if (e.getMessage().matches(".*Bad.*")) bWhile = false;
-				if (e.getMessage().matches(".*Not Found.*")) bWhile = false;
+				if (e.getMessage().matches(".*Bad.*")) break;
+				if (e.getMessage().matches(".*Not Found.*")) break;
 			} catch (Exception e) {
 				System.out.println("feedEx: " + e.getMessage());
 			}
@@ -273,9 +274,7 @@ class CrawlerM extends Thread {
 
     }
 
-	private boolean getPosts(final String blogUri) throws Exception {
-			
-		System.out.print(">>" + blogUri);			
+	private boolean getPosts(final String blogUri) throws Exception {			
 		
 		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
 		
@@ -314,7 +313,7 @@ class CrawlerM extends Thread {
 		int count = 1;
 		int size = resultFeed.getTotalResults();
 
-		System.out.print("("+size+")");
+		System.out.println("["+r+"]"+blogUri+"("+size+")");
 
 		do {
 			
@@ -329,17 +328,16 @@ class CrawlerM extends Thread {
 					continue;
 				}
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					System.out.print("," + count +"{");
+					//System.out.print("," + count +"{");
 					setMongoPost(entry);
 					getComments(postID);
-					System.out.print("}");
+					//System.out.print("}");
 					count++; 
 				}
 			}
 
 		} while (count < size);
 		
-		System.out.print("\n");
 		return true;
 	}
 	
@@ -353,7 +351,7 @@ class CrawlerM extends Thread {
 
 		int count = 1;
 		int size = resultFeed.getTotalResults();
-		System.out.print(size+":");
+		//System.out.print(size+":");
 		do {
 			
 			myQuery.setStartIndex(count);
@@ -367,7 +365,7 @@ class CrawlerM extends Thread {
 						setMongoComment(postUri, entry);
 					}
 				}
-				System.out.print(","+count);
+				//System.out.print(","+count);
 				count++; 
 			}
 

@@ -79,8 +79,6 @@ public class PageRank {
         MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
 		DBCollection collResult2 = output2.getOutputCollection();
 
-		QueryBuilder mpQuery = new QueryBuilder();
-		DBObject mpDoc = query.start("value.pr").notEquals(100).get();
 		BasicDBObject sortDoc = new BasicDBObject();
         sortDoc.put("value.pr", -1);
         
