@@ -70,7 +70,7 @@ public class MongoIterate {
 	public static void getBlogs() throws Exception 
 	{
 
-		BlockingQueue<String[]> queue = new ArrayBlockingQueue<String[]>(numCrawler*2);
+		BlockingQueue<String[]> queue = new ArrayBlockingQueue<String[]>(numCrawler*4);
 
 		CrawlerM[] crawler = new CrawlerM[numCrawler];
 		for (int i=0; i<crawler.length; i++) {
@@ -87,7 +87,7 @@ public class MongoIterate {
 			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
 			try {
-				if (rs.first()) {
+				if (true && rs.first()) {
 					blogs = Pattern.compile("#").split(rs.getString("info"));
 				} else {
 					blogs = getBlogFromMongo();
@@ -178,6 +178,9 @@ class CrawlerM extends Thread {
 	private DB mongoDb;
 	private DBCollection collPosts;	
 	private int r;
+	public static Connection mysqlConn;
+	public static Statement myStm;
+
 
 	BlockingQueue<String[]> q;
 
@@ -189,6 +192,10 @@ class CrawlerM extends Thread {
 
 			myService = new BloggerService("Mongo-BlogFeed-"+r);
 			//myService.setReadTimeout(3000);
+
+			mysqlConn = DriverManager.getConnection(MongoIterate.myConnString);
+			myStm = mysqlConn.createStatement();
+			myStm.executeQuery("set wait_timeout = 7200");
 
 			mongoConn = new Mongo( MongoIterate.mongoHost , MongoIterate.mongoPort );
 			mongoDb = mongoConn.getDB( "blogdb" );
@@ -203,7 +210,7 @@ class CrawlerM extends Thread {
 
 	    	try {
 				boolean bOk = true, bSet = true;  
-				String[] info = q.take();
+				String[] info = q.poll(1, TimeUnit.SECONDS);
 				String[] blogs = null;
 				String profileID = "";
 
@@ -232,19 +239,16 @@ class CrawlerM extends Thread {
 						}
 					}
 				}
-
 				if (bSet) {
-					MongoIterate.myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
+					myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
 				}
-				
 			} catch (Exception e) {
 				System.out.println(r+"runEx:" + e.getMessage());
 			}
-
 			if (q.size() == 0) break;
 		}
 
-		System.out.println("Bye("+r+")";
+		System.out.println("Bye("+r+")");
 		mongoConn.close();
     }
 
@@ -316,7 +320,7 @@ class CrawlerM extends Thread {
 		System.out.println("["+r+"]"+blogUri+"("+size+")");
 
 		do {
-			
+			if (size==0) break;
 			myQuery.setStartIndex(count);
 			if (count>1) resultFeed = feedQuery(myQuery);
 
@@ -328,16 +332,16 @@ class CrawlerM extends Thread {
 					continue;
 				}
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					//System.out.print("," + count +"{");
+					System.out.print("," + count +"{");
 					setMongoPost(entry);
 					getComments(postID);
-					//System.out.print("}");
+					System.out.print("}");
 					count++; 
 				}
 			}
 
-		} while (count < size);
-		
+		} while (count <= size);
+
 		return true;
 	}
 	
@@ -351,7 +355,7 @@ class CrawlerM extends Thread {
 
 		int count = 1;
 		int size = resultFeed.getTotalResults();
-		//System.out.print(size+":");
+		System.out.print(size+":");
 		do {
 			
 			myQuery.setStartIndex(count);
@@ -365,7 +369,7 @@ class CrawlerM extends Thread {
 						setMongoComment(postUri, entry);
 					}
 				}
-				//System.out.print(","+count);
+				System.out.print(","+count);
 				count++; 
 			}
 
@@ -440,7 +444,7 @@ class CrawlerM extends Thread {
 			comment.put("authorID", authorID);
 
 			try {
-				MongoIterate.myStm.executeUpdate("INSERT INTO author SET profileID = '" + authorID + "'");
+				myStm.executeUpdate("INSERT INTO author SET profileID = '" + authorID + "'");
 			} catch (Exception e) { }
 
 			Date published = new Date(entry.getPublished().getValue());
