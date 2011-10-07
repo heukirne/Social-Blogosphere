@@ -24,7 +24,7 @@ public class MongoIterate {
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
 	public static final int mongoPort = 27017;
 	public static final String mongoHost = "localhost";
-	public static final int numCrawler = 1;
+	public static final int numCrawler = 4;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -96,6 +96,8 @@ public class MongoIterate {
 
 			if (blogs==null) continue;
 
+			queue.put(blogs);
+
 			if (queue.size() >= (numCrawler*2)) {
 
 				String sql = "UPDATE neo4jstats SET posts = " + collPosts.getCount() + " LIMIT 1";	
@@ -103,11 +105,11 @@ public class MongoIterate {
 				if (isExit()) break;
 			}
 
-			queue.put(blogs);
-
 		}
 
 		queue.clear();
+	    for (int i=0; i<crawler.length; i++)
+	        queue.put(CrawlerM.NO_MORE_WORK);		
 		for (int i=0; i<crawler.length; i++)
 			crawler[i].join();
 		
@@ -180,7 +182,8 @@ class CrawlerM extends Thread {
 	private int r;
 	public static Connection mysqlConn;
 	public static Statement myStm;
-
+	
+	static final String[] NO_MORE_WORK = new String[]{};
 
 	BlockingQueue<String[]> q;
 
@@ -214,6 +217,10 @@ class CrawlerM extends Thread {
 				String[] blogs = null;
 				String profileID = "";
 
+                if (info == NO_MORE_WORK) {
+                    break;
+                }
+
 				if (info.length == 2) {
 					profileID = info[0];
 					blogs = Pattern.compile(",").split(info[1]);
@@ -245,7 +252,7 @@ class CrawlerM extends Thread {
 			} catch (Exception e) {
 				System.out.println(r+"runEx:" + e.getMessage());
 			}
-			if (q.size() == 0) break;
+
 		}
 
 		System.out.println("Bye("+r+")");
@@ -332,10 +339,10 @@ class CrawlerM extends Thread {
 					continue;
 				}
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					System.out.print("," + count +"{");
+					//System.out.print("," + count +"{");
 					setMongoPost(entry);
 					getComments(postID);
-					System.out.print("}");
+					//System.out.print("}");
 					count++; 
 				}
 			}
@@ -355,7 +362,7 @@ class CrawlerM extends Thread {
 
 		int count = 1;
 		int size = resultFeed.getTotalResults();
-		System.out.print(size+":");
+		//System.out.print(size+":");
 		do {
 			
 			myQuery.setStartIndex(count);
@@ -369,7 +376,7 @@ class CrawlerM extends Thread {
 						setMongoComment(postUri, entry);
 					}
 				}
-				System.out.print(","+count);
+				//System.out.print(","+count);
 				count++; 
 			}
 
