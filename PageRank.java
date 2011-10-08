@@ -83,14 +83,14 @@ public class PageRank {
         sortDoc.put("value.pr", -1);
         
         DBCursor cur = collResult2.find().sort(sortDoc).limit(10);
-        int hash = cursorInt(cur);
+        int hash = cursorHash(cur);
 		int hash2 = 0;
 		for (int i=0; i<10; i++) {
 	        output2 = collResult2.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
 			collResult2 = output2.getOutputCollection();
 
 	        cur = collResult2.find().sort(sortDoc).limit(10);
-	        hash2 = cursorInt(cur);
+	        hash2 = cursorHash(cur);
 
 	        if (hash == hash2) break;
 	        else hash = hash2;
@@ -99,7 +99,7 @@ public class PageRank {
         shutdown();
     }
 
-    private static int cursorInt(DBCursor cur) {
+    private static int cursorHash(DBCursor cur) {
         int sum = 0;
         while(cur.hasNext()) {
     		DBObject obj = cur.next();
