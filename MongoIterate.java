@@ -99,10 +99,8 @@ public class MongoIterate {
 			queue.put(blogs);
 
 			if (queue.size() >= (numCrawler*2)) {
-
 				String sql = "UPDATE neo4jstats SET posts = " + collPosts.getCount() + " LIMIT 1";	
 				myStm.executeUpdate(sql);
-				if (isExit()) break;
 			}
 
 		}
@@ -138,40 +136,6 @@ public class MongoIterate {
 
 	}
 
-	private static Boolean isExit() {
-		File file = new File("AuthorIterateExit.txt");
-		StringBuffer contents = new StringBuffer();
-		BufferedReader reader = null;
-		
-		 
-		try {
-			String text = null;
-			reader = new BufferedReader(new FileReader(file));
-			 
-			while ((text = reader.readLine()) != null) {
-				contents.append(text);
-			}
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				if (reader != null) {
-				reader.close();
-				}
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-
-		int intExit = Integer.parseInt(contents.toString());
-		if (intExit==1)
-			return true;
-		else
-			return false;
-	}
-
 }
 
 class CrawlerM extends Thread {
@@ -181,6 +145,7 @@ class CrawlerM extends Thread {
 	private DB mongoDb;
 	private DBCollection collPosts;	
 	private int r;
+	private String blog;
 	
 	public static Connection mysqlConn;
 	public static Statement myStm;
@@ -206,7 +171,7 @@ class CrawlerM extends Thread {
 			mongoDb = mongoConn.getDB( "blogdb" );
 			collPosts = mongoDb.getCollection("posts");   
 		} catch (Exception e) {
-			System.out.println("runEx:" + e.getMessage());
+			System.out.println(r+"bye:" + e.getMessage());
 		}
 		   
     }
@@ -230,9 +195,9 @@ class CrawlerM extends Thread {
 					blogs = info;
 				}
 
-	    		for (String blog : blogs)
+	    		for (String blogFind : blogs)
 				{
-
+					blog = blogFind;
 					String blogID = blog.trim().replace("http:","").replace("/","");
 					bOk = getPosts(blogID);
 					if (!bOk) bSet = bOk;
@@ -273,15 +238,15 @@ class CrawlerM extends Thread {
 				resultFeed = myService.query(myQuery, Feed.class);
 				break;
 			} catch (MalformedURLException e) {
-				System.out.println("MalformEx:"+ e.getMessage());
+				System.out.println(r+"MalformEx:"+ e.getMessage()+">"+blog);
 			} catch (IOException e) {
-				System.out.println("IOEx:"+ e.getMessage());
+				System.out.println(r+"IOEx:"+ e.getMessage()+">"+blog);
 			} catch (ServiceException e) {
-				System.out.println("ServcEx: "+ e.getMessage());
+				System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
 				if (e.getMessage().matches(".*Bad.*")) break;
 				if (e.getMessage().matches(".*Not Found.*")) break;
 			} catch (Exception e) {
-				System.out.println("feedEx: " + e.getMessage());
+				System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
 			}
 		}
 
