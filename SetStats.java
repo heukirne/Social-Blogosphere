@@ -69,7 +69,7 @@ String reduceCountBlogs = "function( key, values ) { var tot=0; values.forEach(f
 
 QueryBuilder query = new QueryBuilder();
 DBObject docMin = query.start("comments").notEquals(new BasicDBList()).get();
-DBObject docPop = query.start("value.avg").greaterThanEquals(1).get();
+DBObject docPop = query.start("value").greaterThanEquals(25).get();
 
 //MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", docMin);
 //output.getOutputCollection().rename("blogStats",true); //Workaround for Mongo 1.6.3

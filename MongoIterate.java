@@ -24,7 +24,7 @@ public class MongoIterate {
 	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
 	public static final int mongoPort = 27017;
 	public static final String mongoHost = "localhost";
-	public static final int numCrawler = 1;
+	public static final int numCrawler = 4;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -94,7 +94,7 @@ public class MongoIterate {
 				}
 			} catch (Exception e) {}
 
-			if (blogs==null) continue;
+			if (blogs==null) break;
 
 			queue.put(blogs);
 
@@ -129,7 +129,8 @@ public class MongoIterate {
 		DBObject obj = null ;
         if(cur.hasNext()) 
          	obj = cur.next();
-
+        else
+        	return null;
 
 		String[] blogID = { obj.get("_id").toString() };
 		
