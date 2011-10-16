@@ -99,8 +99,7 @@ public class MongoIterate {
 			queue.put(blogs);
 
 			if (queue.size() >= (numCrawler*2)) {
-				String sql = "UPDATE neo4jstats SET posts = " + collPosts.getCount() + " LIMIT 1";	
-				myStm.executeUpdate(sql);
+				myStm.executeUpdate("UPDATE neo4jstats SET posts = " + collPosts.getCount() + " LIMIT 1");
 			}
 
 		}
@@ -178,9 +177,8 @@ class CrawlerM extends Thread {
     public void run() {
     	while (true) {
 
-	    	try {
-				boolean bOk = true, bSet = true;  
-				String[] info = q.poll(1, TimeUnit.SECONDS);
+	    	try { 
+				String[] info = q.take();
 				String[] blogs = null;
 				String profileID = "";
 
@@ -199,23 +197,21 @@ class CrawlerM extends Thread {
 				{
 					blog = blogFind;
 					String blogID = blog.trim().replace("http:","").replace("/","");
-					bOk = getPosts(blogID);
-					if (!bOk) bSet = bOk;
-					else {
-						if (blog.matches("\\d+")) {
-							DBCollection collBlogs = mongoDb.getCollection("blogCount");
-							BasicDBObject docId = new BasicDBObject();
-					        docId.put("_id", blog);
-
-							DBObject obj = collBlogs.findOne(docId);
-							obj.put("dot",1);
-					        collBlogs.save(obj);
-						}
-					}
-				}
-				if (bSet) {
+					
 					myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
+					if (blog.matches("\\d+")) {
+						DBCollection collBlogs = mongoDb.getCollection("blogCount");
+						BasicDBObject docId = new BasicDBObject();
+				        docId.put("_id", blog);
+
+						DBObject obj = collBlogs.findOne(docId);
+						obj.put("dot",1);
+				        collBlogs.save(obj);
+					}
+
+					getPosts(blogID);
 				}
+
 				System.out.println("Finish("+r+")");
 			} catch (Exception e) {
 				System.out.println(r+"runEx:" + e.getMessage());
