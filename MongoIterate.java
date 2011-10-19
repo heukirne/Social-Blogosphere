@@ -239,9 +239,11 @@ class CrawlerM extends Thread {
 			} catch (IOException e) {
 				System.out.println(r+"IOEx:"+ e.getMessage()+">"+blog);
 			} catch (ServiceException e) {
+				if (e.getMessage().matches(".*Bad.*")) return true;
+				if (e.getMessage().matches(".*Not Found.*")) return true;
+				if (e.getMessage().matches(".*Unrecognized.*")) return true;
+				if (e.getMessage().matches(".*Unauthorized.*")) return true;
 				System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
-				if (e.getMessage().matches(".*Bad.*")) break;
-				if (e.getMessage().matches(".*Not Found.*")) break;
 			} catch (Exception e) {
 				System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
 			}
