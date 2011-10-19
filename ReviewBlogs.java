@@ -131,11 +131,11 @@ class CrawlerR extends Thread {
 			myService = new BloggerService("Mongo-BlogFeed-"+r);
 			//myService.setReadTimeout(3000);
 
-			mysqlConn = DriverManager.getConnection(MongoIterate.myConnString);
+			mysqlConn = DriverManager.getConnection(ReviewBlogs.myConnString);
 			myStm = mysqlConn.createStatement();
 			myStm.executeQuery("set wait_timeout = 7200");
 
-			mongoConn = new Mongo( MongoIterate.mongoHost , MongoIterate.mongoPort );
+			mongoConn = new Mongo( ReviewBlogs.mongoHost , ReviewBlogs.mongoPort );
 			mongoDb = mongoConn.getDB( "blogdb" );
 			collPosts = mongoDb.getCollection("posts");   
 		} catch (Exception e) {
