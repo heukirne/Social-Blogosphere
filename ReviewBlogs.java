@@ -192,32 +192,6 @@ class CrawlerR extends Thread {
 		try { myStm.close(); } catch (Exception e) {}
     }
 
-    private Feed feedQuery(Query myQuery) {
-    	
-		Feed resultFeed = new Feed();
-
-		for (int i=0; i<=3; i++) {
-			try {
-				Thread.sleep(100);
-				resultFeed = myService.query(myQuery, Feed.class);
-				break;
-			} catch (MalformedURLException e) {
-				System.out.println(r+"MalformEx:"+ e.getMessage()+">"+blog);
-			} catch (IOException e) {
-				System.out.println(r+"IOEx:"+ e.getMessage()+">"+blog);
-			} catch (ServiceException e) {
-				System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
-				if (e.getMessage().matches(".*Bad.*")) break;
-				if (e.getMessage().matches(".*Not Found.*")) break;
-			} catch (Exception e) {
-				System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
-			}
-		}
-
-		return resultFeed;
-
-    }
-
 	private boolean mongoExist(final String blogUri) throws Exception {			
 		
 		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
@@ -232,20 +206,28 @@ class CrawlerR extends Thread {
 		myQuery.setPublishedMin(dtMin);	
 		myQuery.setMaxResults(1);
 
-		Feed resultFeed = feedQuery(myQuery);
+		try {
+			Feed resultFeed = myService.query(myQuery, Feed.class);
 
-		Matcher matcher = Pattern.compile("\\d+").matcher(resultFeed.getSelfLink().getHref());
-		if (matcher.find()) {
-			String blogID = matcher.group();
-			
-			int size = resultFeed.getTotalResults();
+			Matcher matcher = Pattern.compile("\\d+").matcher(resultFeed.getSelfLink().getHref());
+			if (matcher.find()) {
+				String blogID = matcher.group();
+				
+				int size = resultFeed.getTotalResults();
 
-			BasicDBObject doc = new BasicDBObject();
-			doc.put("blogID", blogID);
+				BasicDBObject doc = new BasicDBObject();
+				doc.put("blogID", blogID);
 
-		    if (size > 0 && collPosts.find(doc).size() > 0) {
-				return true;
-		    }
+			    if (size > 0 && collPosts.find(doc).size() > 0) {
+					return true;
+			    }
+			}
+		} catch (ServiceException e) {
+			System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
+			if (e.getMessage().matches(".*Bad.*")) return true;
+			if (e.getMessage().matches(".*Not Found.*")) return true;
+		} catch (Exception e) {
+			System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
 		}
 
 	    return false;
