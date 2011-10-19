@@ -215,6 +215,7 @@ class CrawlerM extends Thread {
 				System.out.println("Finish("+r+")");
 			} catch (Exception e) {
 				System.out.println(r+"runEx:" + e.getMessage());
+				e.printStackTrace();
 			}
 
 		}
@@ -284,29 +285,30 @@ class CrawlerM extends Thread {
 
 		Feed resultFeed = feedQuery(myQuery);
 		
-		String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
-		
 		int count = 1;
 		int size = resultFeed.getTotalResults();
 
 		do {
-			if (size==0) break;
+			if (size<1) break;
 			myQuery.setStartIndex(count);
 			if (count>1) resultFeed = feedQuery(myQuery);
 
 			System.out.println("["+r+"]"+blogUri+"("+count+"/"+size+")");
 
 			for (Entry entry : resultFeed.getEntries()) {
+					
 				String postID = "";
 				try {
 					postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
 				} catch (Exception e) {
 					continue;
 				}
+
 				if (entry.getAuthors().get(0).getUri()!=null) {
 					setMongoPost(entry);
 					getComments(postID);
 				}
+				
 				count++; 
 			}
 
@@ -333,10 +335,10 @@ class CrawlerM extends Thread {
 			for (Entry entry : resultFeed.getEntries())
 			{
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
-					if (profileID.matches("\\d+")) {
-						setMongoComment(postUri, entry);
-					}
+					
+					Matcher matcherAuthor = Pattern.compile("\\d+").matcher(entry.getAuthors().get(0).getUri());
+					if (matcherAuthor.find()) setMongoComment(postUri, entry);
+
 				}
 				count++; 
 			}
