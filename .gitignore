@@ -18,3 +18,7 @@ MongoIterate
 PageRank
 
 ReviewBlogs
+
+StopWords
+
+WordCount

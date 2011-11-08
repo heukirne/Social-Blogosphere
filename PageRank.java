@@ -28,8 +28,6 @@ public class PageRank {
 		
 		collPosts = mongoDb.getCollection("posts");
 
-		registerShutdownHook();
-
 		String mapAuthor =	"function(){ " +
 							" if (this.content) " +
 							"	if (this.content.indexOf('" + word + "')>0) {"+
@@ -73,7 +71,7 @@ public class PageRank {
 		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).and("content").notEquals("").get();		
 		
 		
-        //MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE, docQuery);
+        MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE, docQuery);
 		DBCollection collResult = mongoDb.getCollection("pageRank_1");
 
         MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
@@ -96,7 +94,7 @@ public class PageRank {
 	        else hash = hash2;
 		}
 		
-        shutdown();
+        mongoConn.close();
     }
 
     private static int checkSum(DBCursor cur) {
@@ -110,21 +108,4 @@ public class PageRank {
     	return sum;
     }
 
-    private static void shutdown()
-    {
-		System.out.println( "Shutting down database ..." );
-		mongoConn.close();
-    }
-	
-    private static void registerShutdownHook()
-    {
-        Runtime.getRuntime().addShutdownHook( new Thread()
-        {
-            @Override
-            public void run()
-            {
-                shutdown();
-            }
-        } );
-    }
 }

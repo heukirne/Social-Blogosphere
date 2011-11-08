@@ -232,24 +232,23 @@ class CrawlerM extends Thread {
 		for (int i=0; i<=3; i++) {
 			try {
 				Thread.sleep(100);
-				resultFeed = myService.query(myQuery, Feed.class);
-				break;
+				return myService.query(myQuery, Feed.class);
 			} catch (MalformedURLException e) {
 				System.out.println(r+"MalformEx:"+ e.getMessage()+">"+blog);
 			} catch (IOException e) {
 				System.out.println(r+"IOEx:"+ e.getMessage()+">"+blog);
 			} catch (ServiceException e) {
-				if (e.getMessage().matches(".*Bad.*")) return true;
-				if (e.getMessage().matches(".*Not Found.*")) return true;
-				if (e.getMessage().matches(".*Unrecognized.*")) return true;
-				if (e.getMessage().matches(".*Unauthorized.*")) return true;
+				if (e.getMessage().matches(".*Bad.*")) return null;
+				if (e.getMessage().matches(".*Not Found.*")) return null;
+				if (e.getMessage().matches(".*Unrecognized.*")) return null;
+				if (e.getMessage().matches(".*Unauthorized.*")) return null;
 				System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
 			} catch (Exception e) {
 				System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
 			}
 		}
 
-		return resultFeed;
+		return null;
 
     }
 
@@ -286,7 +285,8 @@ class CrawlerM extends Thread {
 		}
 
 		Feed resultFeed = feedQuery(myQuery);
-		
+		if (resultFeed == null) return false;
+
 		int count = 1;
 		int size = resultFeed.getTotalResults();
 
@@ -326,6 +326,7 @@ class CrawlerM extends Thread {
 		myQuery.setStartIndex(1);
 		myQuery.setMaxResults(25);
 		Feed resultFeed = feedQuery(myQuery);
+		if (resultFeed == null) return;
 
 		int count = 1;
 		int size = resultFeed.getTotalResults();
@@ -429,6 +430,7 @@ class CrawlerM extends Thread {
 			comments.put(comments.size(),comment);
 	
 			post.append("comments", comments);
+			post.put("numComments", comments.size());
 		
 			collPosts.save(post);
 		}
