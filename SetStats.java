@@ -12,7 +12,7 @@ import java.io.*;
  
 public class SetStats {
  
-	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
+	public static final String myConnString = "jdbc:mysql://143.54.12.###/bloganalysis?user=profile&password=profile";
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -21,7 +21,7 @@ public class SetStats {
 	
     public static void main(String[] args) throws Exception {		
 	
-		mongoConn = new Mongo( "localhost" , 27017 );
+		mongoConn = new Mongo( "143.54.12.###" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -47,35 +47,46 @@ public class SetStats {
 		
         int blogsTotal = 0;
 
-myStm.executeQuery("SELECT sum(1+length(blogs)-length(replace(blogs,',',''))) as cont FROM author WHERE length(blogs) > 5 and Local = 'BR' AND retrieve=1");
+myStm.executeQuery("SELECT sum(1+length(blogs)-length(replace(blogs,',',''))) as cont FROM author WHERE length(blogs) > 5 and Local = 'BR' AND retrieve>0");
 ResultSet rs = myStm.getResultSet();
 rs.next();
 blogsTotal = rs.getInt("cont");
 
 String mapBlogs =	"function(){ " +
-"	emit( this.blogID , this.comments.length ); "+
+"	emit( this.blogID , { posts: 1 , comments: this.comments.length } ); "+
 "	};";							
 
-String mapCountBlogs = "function () { emit ( this.blogID, 1 ); };";
-	
-String reduceAvg = "function( key , values ){ "+
+String mapHistory =       "function(){ " +
+" 	var day = this._id.getTimestamp().getFullYear() + '.';"+
+"	day += this._id.getTimestamp().getMonth() + '.';"+
+"	day += this._id.getTimestamp().getDate();"+
+"       emit( day , 1 ); "+
+"  };";
+
+String reduceHistory = "function( key , values ){ "+
 " var totCom = 0; " +
-" for ( var i=0; i<values.length; i++ ) {"+
-"	totCom += parseInt(values[i]); "+
-" } " +
+" values.forEach(function(value) {"+
+" 	totCom += value;"+
+" });"+
 " return totCom; };";
 
-String reduceCountBlogs = "function( key, values ) { var tot=0; values.forEach(function(value) {tot+=value;}); return tot; };";
+
+String reduceBlogs = "function( key, values ) { "+
+"var result = { posts:0, comments:0 };"+
+"values.forEach(function(value) {"+
+	"result.posts += value.posts;"+
+	"result.comments += parseInt(value.comments);"+
+"}); return result; };";
 
 QueryBuilder query = new QueryBuilder();
-DBObject docMin = query.start("comments").notEquals(new BasicDBList()).get();
+DBObject docMin = query.start("numComments").greaterThanEquals(1).get();
 DBObject docPop = query.start("value").greaterThanEquals(25).get();
 
-//MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceAvg, "blogStats", docMin);
-//output.getOutputCollection().rename("blogStats",true); //Workaround for Mongo 1.6.3
-//MapReduceOutput output2 = collPosts.mapReduce(mapCountBlogs, reduceCountBlogs, "blogCount", null);
-//output2.getOutputCollection().rename("blogCount",true);
+DBObject docQuery = query.start("numComments").greaterThanEquals(20).get();
+MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceBlogs, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
+//MapReduceOutput output = collPosts.mapReduce(mapHistory, reduceHistory, "history", MapReduceCommand.OutputType.REPLACE ,null);
 
+/*
 	DBCollection collBlogCount = mongoDb.getCollection("blogCount");
 	DBCollection collResult = mongoDb.getCollection("blogStats");
 
@@ -97,16 +108,13 @@ DBObject docPop = query.start("value").greaterThanEquals(25).get();
 		
 		System.out.println(">>> Blogs Inactive: " + blogsInactive );
 		
-		//System.out.println("Mongo Users Posted: " + collPosts.distinct("authorID").size() );
-		
 		System.out.println("Mongo Blogs Filled: " + blogsActive );
 		System.out.println("Mongo Blogs With Comments: " + blogsLive );
 		System.out.println("Mongo Blogs Empty Comments: " + blogsLonely );
 		System.out.println("Mongo Blogs Popular: " + blogsPop );
 		
 		System.out.println("Mongo Posts: " + collPosts.getCount() );	
-		//System.out.println("Mongo Tags: " + collPosts.distinct("tags").size() );
-		
+*/		
         shutdown();
     }
 	

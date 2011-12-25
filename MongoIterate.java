@@ -21,9 +21,9 @@ import java.util.concurrent.*;
  
 public class MongoIterate {
  
-	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=root&password=";
+	public static final String myConnString = "jdbc:mysql://143.54.12.###/bloganalysis?user=profile&password=profile";
 	public static final int mongoPort = 27017;
-	public static final String mongoHost = "localhost";
+	public static final String mongoHost = "143.54.12.###";
 	public static final int numCrawler = 4;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
@@ -87,7 +87,7 @@ public class MongoIterate {
 			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
 			try {
-				if (true && rs.first()) {
+				if (false && rs.first()) {
 					blogs = Pattern.compile("#").split(rs.getString("info"));
 				} else {
 					blogs = getBlogFromMongo();
@@ -114,20 +114,23 @@ public class MongoIterate {
 	
 	private static String[] getBlogFromMongo() {
 
-		DBCollection collBlogs = mongoDb.getCollection("blogCount");
+		DBCollection collBlogs = mongoDb.getCollection("blogStats");
 
 		QueryBuilder query = new QueryBuilder();
-		DBObject docUnset = query.start("dot").notEquals(1).and("value").greaterThanEquals(20).get();
+		DBObject docUnset = query.start("dot").notEquals(1).get();
+
+		BasicDBObject sortDoc = new BasicDBObject();
+        	sortDoc.put("value.posts", -1);
 
 		Random generator = new Random();
-		int r = generator.nextInt(collBlogs.find(docUnset).size());
+		int r = generator.nextInt(10);
 
-		DBCursor cur = collBlogs.find(docUnset).skip(r);
+		DBCursor cur = collBlogs.find(docUnset).sort(sortDoc).limit(30).skip(r);
 		DBObject obj = null ;
-        if(cur.hasNext()) 
-         	obj = cur.next();
-        else
-        	return null;
+        	if(cur.hasNext()) 
+         		obj = cur.next();
+        	else
+        		return null;
 
 		String[] blogID = { obj.get("_id").toString() };
 		
@@ -181,7 +184,7 @@ class CrawlerM extends Thread {
 				String[] info = q.take();
 				String[] blogs = null;
 				String profileID = "";
-
+		
                 if (info == NO_MORE_WORK) {
                     break;
                 }
@@ -192,6 +195,7 @@ class CrawlerM extends Thread {
 				} else {
 					blogs = info;
 				}
+
 
 	    		for (String blogFind : blogs)
 				{
@@ -214,8 +218,7 @@ class CrawlerM extends Thread {
 
 				System.out.println("Finish("+r+")");
 			} catch (Exception e) {
-				System.out.println(r+"runEx:" + e.getMessage());
-				e.printStackTrace();
+				System.out.println(r+"runEx:" + e.getMessage()+">"+blog);
 			}
 
 		}
@@ -232,23 +235,22 @@ class CrawlerM extends Thread {
 		for (int i=0; i<=3; i++) {
 			try {
 				Thread.sleep(100);
-				return myService.query(myQuery, Feed.class);
+				resultFeed = myService.query(myQuery, Feed.class);
+				break;
 			} catch (MalformedURLException e) {
 				System.out.println(r+"MalformEx:"+ e.getMessage()+">"+blog);
 			} catch (IOException e) {
 				System.out.println(r+"IOEx:"+ e.getMessage()+">"+blog);
 			} catch (ServiceException e) {
-				if (e.getMessage().matches(".*Bad.*")) return null;
-				if (e.getMessage().matches(".*Not Found.*")) return null;
-				if (e.getMessage().matches(".*Unrecognized.*")) return null;
-				if (e.getMessage().matches(".*Unauthorized.*")) return null;
 				System.out.println(r+"ServcEx: "+ e.getMessage()+">"+blog);
+				if (e.getMessage().matches(".*Bad.*")) break;
+				if (e.getMessage().matches(".*Not Found.*")) break;
 			} catch (Exception e) {
 				System.out.println(r+"feedEx: " + e.getMessage()+">"+blog);
 			}
 		}
 
-		return null;
+		return resultFeed;
 
     }
 
@@ -262,8 +264,13 @@ class CrawlerM extends Thread {
 		} 
 
 		Query myQuery = new Query(feedUrl);
+		
 		DateTime dtMin = DateTime.parseDate("2011-01-01");
+                DateTime dtMax = DateTime.parseDate("2011-12-31");
+
 		myQuery.setPublishedMin(dtMin);	
+		myQuery.setPublishedMax(dtMax);
+
 
 		if (blogUri.matches("\\d+")) {
 			BasicDBObject doc = new BasicDBObject();
@@ -285,32 +292,30 @@ class CrawlerM extends Thread {
 		}
 
 		Feed resultFeed = feedQuery(myQuery);
-		if (resultFeed == null) return false;
-
+		
+		String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
+		
 		int count = 1;
 		int size = resultFeed.getTotalResults();
 
 		do {
-			if (size<1) break;
+			if (size==0) break;
 			myQuery.setStartIndex(count);
 			if (count>1) resultFeed = feedQuery(myQuery);
 
 			System.out.println("["+r+"]"+blogUri+"("+count+"/"+size+")");
 
 			for (Entry entry : resultFeed.getEntries()) {
-					
 				String postID = "";
 				try {
 					postID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("posts/default/","");					
 				} catch (Exception e) {
 					continue;
 				}
-
 				if (entry.getAuthors().get(0).getUri()!=null) {
 					setMongoPost(entry);
 					getComments(postID);
 				}
-				
 				count++; 
 			}
 
@@ -326,7 +331,6 @@ class CrawlerM extends Thread {
 		myQuery.setStartIndex(1);
 		myQuery.setMaxResults(25);
 		Feed resultFeed = feedQuery(myQuery);
-		if (resultFeed == null) return;
 
 		int count = 1;
 		int size = resultFeed.getTotalResults();
@@ -338,10 +342,10 @@ class CrawlerM extends Thread {
 			for (Entry entry : resultFeed.getEntries())
 			{
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					
-					Matcher matcherAuthor = Pattern.compile("\\d+").matcher(entry.getAuthors().get(0).getUri());
-					if (matcherAuthor.find()) setMongoComment(postUri, entry);
-
+					String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+					if (profileID.matches("\\d+")) {
+						setMongoComment(postUri, entry);
+					}
 				}
 				count++; 
 			}
@@ -430,7 +434,6 @@ class CrawlerM extends Thread {
 			comments.put(comments.size(),comment);
 	
 			post.append("comments", comments);
-			post.put("numComments", comments.size());
 		
 			collPosts.save(post);
 		}
