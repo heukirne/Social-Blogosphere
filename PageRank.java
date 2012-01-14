@@ -16,7 +16,7 @@ public class PageRank {
 
         String word = "futebol";
 
-		mongoConn = new Mongo( "143.54.12.###" , 27017 );
+		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -73,9 +73,9 @@ public class PageRank {
 							"};";													
 		
 	QueryBuilder query = new QueryBuilder();
-	DBObject docQuery = query.start("content").is(Pattern.compile("ford|fiat|chevrolet|toyota|hyundai|peugeot|renault|citroen|audi|dodge|honda|nissan|chrysler|kia|chery|volvo|mercedes",Pattern.CASE_INSENSITIVE)).get();
-	docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).and("numComments").greaterThanEquals(10).get();
-       	MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_x", MapReduceCommand.OutputType.REPLACE ,docQuery);
+	DBObject docQuery = query.start("content").is(Pattern.compile("governo|piso|politica|vida|Brasil|pais|greve|direito",Pattern.CASE_INSENSITIVE)).get();
+	//docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).get();
+    MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE ,docQuery);
 	
 	/*
 	DBCollection collResult = mongoDb.getCollection("pageRank_1");
@@ -90,7 +90,7 @@ public class PageRank {
 		int hash2 = 0;
 		for (int i=0; i<10; i++) {
 	        output2 = collResult2.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", null);
-		collResult2 = output2.getOutputCollection();
+			collResult2 = output2.getOutputCollection();
 
 	        cur = collResult2.find().sort(sortDoc).limit(10);
 	        hash2 = checkSum(cur);

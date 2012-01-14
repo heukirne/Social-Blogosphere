@@ -10,7 +10,7 @@ public class StopWords {
   
 	private static Mongo mongoConn;
 	private static DB mongoDb;
-	private static DBCollection collSWords;
+	private static DBCollection collSWords, collWords;
 	
     public static void main(String[] args) throws Exception {		
 
@@ -26,7 +26,8 @@ public class StopWords {
 		}
 		
 		collSWords = mongoDb.getCollection("stopWords");	
-		collSWords.ensureIndex("word");	
+		collWords = mongoDb.getCollection("words");
+		//collSWords.ensureIndex("word");	
 
 		File file = new File("stopwordsBR2.txt");
 		BufferedReader reader = null;

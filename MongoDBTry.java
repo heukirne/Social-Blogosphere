@@ -15,10 +15,7 @@ public class MongoDBTry {
 	
     public static void main(String[] args) throws Exception {		
 	
-        if (args.length != 1) {
-            System.out.println("Usage: java WordFrequency inputWord");
-            System.exit(1);
-        }
+        
 
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
@@ -31,11 +28,11 @@ public class MongoDBTry {
 		}
 		
 		collPosts = mongoDb.getCollection("posts");
-		collPosts.ensureIndex("postID");
-		collPosts.ensureIndex("blogID");				
-		collPosts.ensureIndex("authorID");
+		//collPosts.ensureIndex("postID");
+		//collPosts.ensureIndex("blogID");				
+		//collPosts.ensureIndex("authorID");
 
-		registerShutdownHook();
+		//registerShutdownHook();
 		
 		String mapTags = 	"function(){ "+
 							"	this.tags.forEach( "+
@@ -51,10 +48,11 @@ public class MongoDBTry {
 							"};";
 							
 		String mapContent =	"function(){ " +
+							"   if (this.content)" +
 							"	this.content.split(' ').forEach( " +
 							"		function(word){ " +
 							"			word.split('\\n').forEach( " +
-							"				function(piece){ emit( piece , { count : 1 } ); } "+
+							"				function(piece){ emit( piece , 1 ); } "+
 							"			); "+
 							"		} "+
 							"	); "+
@@ -76,24 +74,28 @@ public class MongoDBTry {
 							"   } " +
 							"	return Math.round(totCom/posts); "+
 							"};";
-
+							
         String reduceAuthor = "function( key , values ){ "+
-							"	var totCom = ''; " +
-							"	for ( var i=0; i<values.length; i++ ) {"+
-							"		totCom += values[i]; "+
-							"   } " +
+							"	var totCom = 0; " +
+							"	values.forEach(function(value) {"+
+							"		totCom += value; "+
+							"   }); " +
 							"	return totCom; "+
-							"};";							
+							"};";						
 		
 
 		
 		QueryBuilder query = new QueryBuilder();
-		DBObject docQuery = query.start("comments").notEquals(new BasicDBList()).and("content").notEquals("").get();		
+		DBObject docQuery = query.start("numComments").is(10).and("content").notEquals("").get();		
 		
 		/*
         MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "atuhorComp", MapReduceCommand.OutputType.REPLACE, docQuery);
 		DBCollection collResult = output.getOutputCollection();
 		*/
+
+		//MapReduceOutput output = collPosts.mapReduce(mapContent, reduceAuthor, "words", MapReduceCommand.OutputType.REPLACE, docQuery);
+
+		/*
 		DBCollection collResult = mongoDb.getCollection("atuhorComp");
 
 		QueryBuilder mpQuery = new QueryBuilder();
@@ -101,7 +103,10 @@ public class MongoDBTry {
 		
 		BasicDBObject sortDoc = new BasicDBObject();
         sortDoc.put("value", -1);
+        */
 
+
+        /*
 		Writer output = null;
 		File file = new File("wordCommunity.graphml");
 		output = new BufferedWriter(new FileWriter(file));  
@@ -143,6 +148,7 @@ public class MongoDBTry {
 		output.write("</graphml>");
 		
 		output.close();
+		*/
 		
         shutdown();
     }
