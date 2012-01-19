@@ -14,8 +14,6 @@ public class PageRank {
 	
     public static void main(String[] args) throws Exception {		
 
-        String word = "futebol";
-
 		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
@@ -27,8 +25,6 @@ public class PageRank {
 		}
 		
 		collPosts = mongoDb.getCollection("posts");
-
-		registerShutdownHook();
 
 		String mapAuthor =	"function(){ " +
 							//" if (this.content) " +
@@ -73,13 +69,15 @@ public class PageRank {
 							"};";													
 		
 	QueryBuilder query = new QueryBuilder();
-	DBObject docQuery = query.start("content").is(Pattern.compile("governo|piso|politica|vida|Brasil|pais|greve|direito",Pattern.CASE_INSENSITIVE)).get();
+	DBObject docQuery = query.start("tags").is("politica").and("content").is(Pattern.compile("governo|Brasil|pais|greve|direito",Pattern.CASE_INSENSITIVE)).get();
+	//docQuery = query.start("tags").is("politica").and("authorID").is("15379833583638166492").get();
+	//docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).and("authorID").is("15379833583638166492").get();
 	//docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).get();
-    MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE ,docQuery);
+    //MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE ,docQuery);
 	
-	/*
+	
 	DBCollection collResult = mongoDb.getCollection("pageRank_1");
-        MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
+    MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
 	DBCollection collResult2 = output2.getOutputCollection();
 
 	BasicDBObject sortDoc = new BasicDBObject();
@@ -98,8 +96,8 @@ public class PageRank {
 	        //if (hash == hash2) break;
 	        //else hash = hash2;
 		}
-	*/
-        shutdown();
+	
+        mongoConn.close();
     }
 
     private static int checkSum(DBCursor cur) {
@@ -113,21 +111,4 @@ public class PageRank {
     	return sum;
     }
 
-    private static void shutdown()
-    {
-		System.out.println( "Shutting down database ..." );
-		mongoConn.close();
-    }
-	
-    private static void registerShutdownHook()
-    {
-        Runtime.getRuntime().addShutdownHook( new Thread()
-        {
-            @Override
-            public void run()
-            {
-                shutdown();
-            }
-        } );
-    }
 }

@@ -10,7 +10,8 @@ function normalize($name) {
 // Google don't like flood requests
 // 231 days for 2 million users profile page each 10s
 $getAuthorInfo = "http://www.blogger.com/profile/";
-$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo');
+$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo','Interesses','Introducao');
+
 $link = mysql_connect('localhost', 'gemeos110', 'none');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
@@ -38,33 +39,47 @@ while (true) {
 		mysql_select_db('gemeos110');
 		mysql_query("set wait_timeout = 7200");
 		continue;
-	}	
+	}
+		
 	
+	//$author['id'] = '08655776643235429034';
 	if (@$html = file_get_contents($getAuthorInfo.$author['id'])) {
 		$html = str_replace('strong','b',$html);
-		preg_match_all("/<b>([^<]*)<\/b>(\n)?([^<]*)(.*)/", $html, $listItens); 
-		preg_match_all("/href=\"([^\"]+)\"[^\"]+\"contributor-to/", $html, $blogs); 
-	
+		preg_match_all("/=\"item-key\"\>([^<]*)<\/th>(\n)?([^<]*)(.*)/", $html, $listItens); 
+		preg_match_all("/href=\"([^\"]+)\"[^\"]+\"contributor-to/", $html, $blogs); 	
+
 		$prop = array();
-		foreach ($listItens[1] as $i => $name) 
-			if (strpos($name,':')) {
-				$name = str_replace(':','',$name);
-				$name = str_replace(' ','_',$name);
-				$name = normalize($name);
-				$prop[$name] = trim($listItens[3][$i])?$listItens[3][$i]:$listItens[4][$i];
-			}
+		foreach ($listItens[1] as $i => $name) {
+			$name = str_replace(':','',$name);
+			$name = str_replace(' ','_',$name);
+			$name = normalize($name);
+			$prop[$name] = $listItens[4][$i];
+		}
+
 		if (!empty($prop)) {
 			foreach ($prop as $i => $value) {
 				$result = array();
 				if (strpos($value,'role')) preg_match("/ind=([^\"]*)/",$value,$result);
 				if (strpos($value,'title')) preg_match("/q=([^\"]*)/",$value,$result);
 				//if (strpos($value,'loc1')) preg_match("/loc1=(\w*)/",$value,$result);
-				//if (strpos($value,'loc2')) preg_match("/loc2=(\w*)/",$value,$result);
+				if (strpos($value,'favorites')) preg_match_all("/q=(\w*)/",$value,$result);
+				if (strpos($i,'ocal')) preg_match("/loc0=(\w{2})/",$html,$result);
 				if (strpos($value,'loc0')) preg_match("/loc0=(\w{2})/",$value,$result);
-				$prop[$i] = normalize((empty($result))?$value:$result[1]);
+				
+				if (!empty($result[1]) && is_array($result[1]))  {
+					$prop[$i] = join(',',$result[1]);
+					$prop[$i] = normalize($prop[$i]);
+				} else {
+					$prop[$i] = normalize((empty($result))?$value:$result[1]);
+				}
+				$prop[$i] = str_replace('<td>','',$prop[$i]);
+				$prop[$i] = str_replace('<.td>','',$prop[$i]);
+				$prop[$i] = str_replace('<.tr>','',$prop[$i]);
 			}
 		} 
-			
+
+		//print_r($prop);
+
 		$sql = "UPDATE author SET ";
 		foreach ($propArray as $name) {
 			if (!empty($prop[$name])) {

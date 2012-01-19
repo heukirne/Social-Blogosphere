@@ -25,7 +25,7 @@ public class WordCount {
 		}
 		
 		collSWords = mongoDb.getCollection("stopWords");	
-		collWords = mongoDb.getCollection("words");
+		collWords = mongoDb.getCollection("words_popular");
 		collPosts = mongoDb.getCollection("posts");
 		
 		String mapContent =	"function(){ " +
@@ -68,21 +68,21 @@ public class WordCount {
 		while(cur.hasNext()) {
 			DBObject obj = cur.next();
 			word = obj.get("_id").toString().replaceAll("\\W","");
-			//stopQuery = new BasicDBObject();
-			//stopQuery.put("word",word);
-			stopQuery = query.start("word").is(Pattern.compile(word,Pattern.CASE_INSENSITIVE)).get();
-			wordQuery = query.start("_id").is(Pattern.compile(word,Pattern.CASE_INSENSITIVE)).and("dot").is(1).get();
+			stopQuery = new BasicDBObject();
+			stopQuery.put("word",word);
+			//stopQuery = query.start("word").is(Pattern.compile(word,Pattern.CASE_INSENSITIVE)).get();
+			//wordQuery = query.start("_id").is(Pattern.compile(word,Pattern.CASE_INSENSITIVE)).and("dot").is(1).get();
 			
-			if (collSWords.find(stopQuery).count()==0 && collSWords.find(wordQuery).count()==0) {
+			if (collSWords.find(stopQuery).count()==0) { // && collSWords.find(wordQuery).count()==0) {
 				System.out.println( word);			
 				if (scan.nextInt() == 1) {
 					doc = new BasicDBObject();
 					doc.put("word", word);
-					//collSWords.insert(doc);
+					collSWords.insert(doc);
 				}
 			}
 			obj.put("dot",1);
-			//collWords.save(obj);
+			collWords.save(obj);
 		}
 
         mongoConn.close();

@@ -47,11 +47,11 @@ public class WordSimilar {
 							"};";							
 		
 		QueryBuilder query = new QueryBuilder();
-		DBObject docQuery = query.start("numComments").is(10).and("content").notEquals("").get();
-		docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).and("numComments").greaterThan(5).get();
+		DBObject docQuery = query.start("numComments").greaterThan(30).get();
+		docQuery = query.start("tags").is("casa").and("numComments").greaterThan(5).get();
 
-        //MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "words_politica", MapReduceCommand.OutputType.REPLACE, docQuery);
-		DBCollection collResult = mongoDb.getCollection("words_politica");
+        MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "words_casa", MapReduceCommand.OutputType.REPLACE, docQuery);
+		DBCollection collResult = mongoDb.getCollection("words_casa");
 
 		DBObject stopQuery;	
 
