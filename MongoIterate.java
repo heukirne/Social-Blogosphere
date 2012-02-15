@@ -21,9 +21,9 @@ import java.util.concurrent.*;
  
 public class MongoIterate {
  
-	public static final String myConnString = "jdbc:mysql://143.54.12.###/bloganalysis?user=profile&password=profile";
+	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=myself&password=myself";
 	public static final int mongoPort = 27017;
-	public static final String mongoHost = "143.54.12.###";
+	public static final String mongoHost = "localhost";
 	public static final int numCrawler = 4;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
@@ -87,7 +87,7 @@ public class MongoIterate {
 			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
 			rs = myStm.getResultSet();
 			try {
-				if (false && rs.first()) {
+				if (true && rs.first()) {
 					blogs = Pattern.compile("#").split(rs.getString("info"));
 				} else {
 					blogs = getBlogFromMongo();
@@ -123,9 +123,9 @@ public class MongoIterate {
         	sortDoc.put("value.posts", -1);
 
 		Random generator = new Random();
-		int r = generator.nextInt(10);
+		int r = generator.nextInt(50);
 
-		DBCursor cur = collBlogs.find(docUnset).sort(sortDoc).limit(30).skip(r);
+		DBCursor cur = collBlogs.find(docUnset).sort(sortDoc).limit(52).skip(r);
 		DBObject obj = null ;
         	if(cur.hasNext()) 
          		obj = cur.next();
@@ -204,7 +204,7 @@ class CrawlerM extends Thread {
 					
 					myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
 					if (blog.matches("\\d+")) {
-						DBCollection collBlogs = mongoDb.getCollection("blogCount");
+						DBCollection collBlogs = mongoDb.getCollection("blogStats");
 						BasicDBObject docId = new BasicDBObject();
 				        docId.put("_id", blog);
 
@@ -254,7 +254,7 @@ class CrawlerM extends Thread {
 
     }
 
-	private boolean getPosts(final String blogUri) throws Exception {			
+	private boolean getPosts(String blogUri) throws Exception {			
 		
 		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
 		
@@ -271,29 +271,34 @@ class CrawlerM extends Thread {
 		myQuery.setPublishedMin(dtMin);	
 		myQuery.setPublishedMax(dtMax);
 
+		if (!blogUri.matches("\\d+")) {
+			myQuery.setMaxResults(1);
+			Feed resultFeed = feedQuery(myQuery);
+			Matcher matcher = Pattern.compile("\\d+").matcher(resultFeed.getSelfLink().getHref());
+			if (matcher.find()) {	
+				blogUri = matcher.group();
+			}
+			myQuery.setMaxResults(25);
+		}
 
 		if (blogUri.matches("\\d+")) {
 			BasicDBObject doc = new BasicDBObject();
 			doc.put("blogID", blogUri);
 			BasicDBObject sortDoc = new BasicDBObject();
-	        sortDoc.put("published", -1);
+		        sortDoc.put("published", -1);
 
-	        if (collPosts.find(doc).size() > 0) {
-				DBCursor cur = collPosts.find(doc).sort(sortDoc);
+	        	if (collPosts.find(doc).size() > 0) {
+			DBCursor cur = collPosts.find(doc).sort(sortDoc).limit(5);
 		        if(cur.hasNext()) {
-		        	Date dateChange = formatter.parse("2011-10-03"); //Change Crawler Date
 		        	DBObject obj = cur.next();
 		        	dtMin = new DateTime((Date)obj.get("published"));
-					if (collPosts.find(doc).size() > 30 || dateChange.compareTo((Date)obj.get("published")) < 0) 
-					    myQuery.setPublishedMin(dtMin);
+				myQuery.setPublishedMin(dtMin);
 		        }
 	        }
 
 		}
 
 		Feed resultFeed = feedQuery(myQuery);
-		
-		String blogID = resultFeed.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("/posts/default/?published-min=2011-01-01","");					
 		
 		int count = 1;
 		int size = resultFeed.getTotalResults();
