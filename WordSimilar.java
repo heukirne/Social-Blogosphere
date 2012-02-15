@@ -48,10 +48,10 @@ public class WordSimilar {
 		
 		QueryBuilder query = new QueryBuilder();
 		DBObject docQuery = query.start("numComments").greaterThan(30).get();
-		docQuery = query.start("tags").is("casa").and("numComments").greaterThan(5).get();
+		docQuery = query.start("tags").is("religiao").and("numComments").greaterThan(5).get();
 
-        MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "words_casa", MapReduceCommand.OutputType.REPLACE, docQuery);
-		DBCollection collResult = mongoDb.getCollection("words_casa");
+        MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "words_religiao", MapReduceCommand.OutputType.REPLACE, docQuery);
+		DBCollection collResult = mongoDb.getCollection("words_religiao");
 
 		DBObject stopQuery;	
 
