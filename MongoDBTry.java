@@ -59,11 +59,12 @@ public class MongoDBTry {
 							"};";	
 
 		String mapAuthor =	"function(){ " +
-							" if (this.content) " +
-							"	if (this.content.indexOf('futebol')>0) { "+
-							"		var comAuthor = '';"+
-							"		this.comments.forEach ( function (comment) { comAuthor += comment.authorID + ','; } );"+
-							"		emit( this.authorID , comAuthor ); } "+
+							"idAuthor = this.authorID;"+
+							"this.comments.forEach ( function (comment) {"+ 
+								"if (comment.authorID != idAuthor) {"+
+								"emit (comment.authorID, { post : 0 , comment : 1   } ); } "+
+							"} );"+
+							"emit( this.authorID , { post : 1, comment : 0 } ); "+
 							"};";							
 		
         String reduceAvg = "function( key , values ){ "+
@@ -76,22 +77,23 @@ public class MongoDBTry {
 							"};";
 							
         String reduceAuthor = "function( key , values ){ "+
-							"	var totCom = 0; " +
+							"	var Tcomment = 0; var Tpost = 0; " +
 							"	values.forEach(function(value) {"+
-							"		totCom += value; "+
+							"		Tpost += value.post; "+
+							"		Tcomment += value.comment;"+
 							"   }); " +
-							"	return totCom; "+
+							"	return { post : Tpost , comment : Tcomment }; "+
 							"};";						
 		
 
 		
 		QueryBuilder query = new QueryBuilder();
-		DBObject docQuery = query.start("numComments").is(10).and("content").notEquals("").get();		
+		DBObject docQuery = query.start("tags").is("politica").get();		
 		
-		/*
-        MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "atuhorComp", MapReduceCommand.OutputType.REPLACE, docQuery);
-		DBCollection collResult = output.getOutputCollection();
-		*/
+		
+        MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "authorPag1", MapReduceCommand.OutputType.REPLACE, null);
+		//DBCollection collResult = output.getOutputCollection();
+		
 
 		//MapReduceOutput output = collPosts.mapReduce(mapContent, reduceAuthor, "words", MapReduceCommand.OutputType.REPLACE, docQuery);
 

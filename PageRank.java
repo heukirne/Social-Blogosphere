@@ -1,5 +1,11 @@
 import com.mongodb.*;
 
+import java.sql.SQLException;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.sql.ResultSet;
+import java.sql.DriverManager;
+
 import java.util.regex.*;
 import java.util.*;
 import java.net.*;
@@ -11,6 +17,9 @@ public class PageRank {
 	private static Mongo mongoConn;
 	private static DB mongoDb;
 	private static DBCollection collPosts;
+	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=myself&password=myself";
+        public static Connection mysqlConn;
+        public static Statement myStm;
 	
     public static void main(String[] args) throws Exception {		
 
@@ -23,27 +32,33 @@ public class PageRank {
 			System.out.println("MongoDB Offline.");
 			System.exit(1);
 		}
+
+		try {
+			mysqlConn = DriverManager.getConnection(myConnString);
+			myStm = mysqlConn.createStatement();
+			myStm.executeQuery("set wait_timeout = 7200");
+		} catch (Exception e) {
+			System.out.println("MySQL Offline.");
+			System.exit(1);
+		}
 		
 		collPosts = mongoDb.getCollection("posts");
 
 		String mapAuthor =	"function(){ " +
-							//" if (this.content) " +
-							//"     if (this.content.match(/fiat|ford/i)) {"+
-							//"	if (this.content.indexOf('fiat')>0 && this.content.indexOf('fiat')>0) {"+
 							"		idAuthor = this.authorID;"+
-							"		emit ( this.authorID, { pr:1, outL: [] } );"+
+							"		emit ( this.authorID, { post:1, comment:0, outL:[] } );"+
 							"		this.comments.forEach ( function (comment) { "+
 							"			if (comment.authorID!=idAuthor) {" +
-							"				emit ( comment.authorID , { pr:0.25 , outL:[ idAuthor ] } ); " +
+							"				emit ( comment.authorID , { post:0, comment:1 , outL:[ idAuthor ] } ); " +
 							"			}"+
 							"		} ); "+
-							//"	} "+
 							"}; ";								
 
         String reduceAuthor = "function( key , values ){ "+
-							"	var result = { pr:0, outL:[] }; " +
+							"	var result = { post:0, comment:0, outL:[] }; " +
 							"	values.forEach(function(value) {"+
-							"		result.pr += value.pr;"+
+							"		result.post += value.post;"+
+							"               result.comment += value.comment;"+
 							"		result.outL = result.outL.concat(value.outL); "+
 							"   }); " +
 							"	return result; "+
@@ -55,7 +70,7 @@ public class PageRank {
 							"	this.value.outL.forEach ( function (value) { "+
 							"		emit ( value , { pr:prK , outL:[] } ); " +
 							"	} ); "+
-							"	emit ( this._id , this.value );" +
+							"	emit ( this._id , { pr: 0 , outL: this.value.outL  } );" +
 							"}; ";	
 							
 
@@ -69,15 +84,49 @@ public class PageRank {
 							"};";													
 		
 	QueryBuilder query = new QueryBuilder();
-	DBObject docQuery = query.start("tags").is("politica").and("content").is(Pattern.compile("governo|Brasil|pais|greve|direito",Pattern.CASE_INSENSITIVE)).get();
+	DBObject docQuery = query.start("tags").is("politica").get();
 	//docQuery = query.start("tags").is("politica").and("authorID").is("15379833583638166492").get();
 	//docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).and("authorID").is("15379833583638166492").get();
 	//docQuery = query.start("content").is(Pattern.compile("politica",Pattern.CASE_INSENSITIVE)).get();
-    //MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE ,docQuery);
+
+
+    	//MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_1", MapReduceCommand.OutputType.REPLACE ,docQuery);
+ 	DBCollection collResult = mongoDb.getCollection("pageRank_1");
+/*
+	DBCollection collAuthor = mongoDb.getCollection("authorAll");
+
+	BasicDBObject doc = new BasicDBObject();
+	Double prPost = 0d;
+	Double prComment = 0d;
+        DBCursor cur = collResult.find();
+        while(cur.hasNext()) {
+                BasicDBObject obj = (BasicDBObject)cur.next();
+
+		doc = new BasicDBObject();
+		doc.put("_id",obj.get("_id").toString());
+		BasicDBObject author = (BasicDBObject)collAuthor.findOne(doc);
+		BasicDBObject objValue = (BasicDBObject)obj.get("value");
+
+		prPost = objValue.getDouble("post");
+		prPost = (prPost * prPost) / ((BasicDBObject)author.get("value")).getDouble("post");
+		prComment = objValue.getDouble("comment");
+		prComment = (prComment * prComment) / ((BasicDBObject)author.get("value")).getDouble("comment");
+
+		if (prPost.isNaN()) { prPost = 0d; }
+		if (prComment.isNaN()) { prComment = 0d; }
+
+		obj.put("pr_post",prPost);
+		obj.put("pr_comment",prComment);
+		objValue.put("pr",prPost + prComment * 0.33d);
+		obj.append("value",objValue);
+
+		collResult.save(obj);
+        }
+*/
+
+
 	
-	
-	DBCollection collResult = mongoDb.getCollection("pageRank_1");
-    MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
+    	MapReduceOutput output2 = collResult.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2", MapReduceCommand.OutputType.REPLACE, null);
 	DBCollection collResult2 = output2.getOutputCollection();
 
 	BasicDBObject sortDoc = new BasicDBObject();
@@ -96,8 +145,39 @@ public class PageRank {
 	        //if (hash == hash2) break;
 	        //else hash = hash2;
 		}
+
+
+
+	collResult = mongoDb.getCollection("pageRank_2");
+        sortDoc = new BasicDBObject();
+        sortDoc.put("value.pr", -1);
+
+	cur = collResult.find().sort(sortDoc).limit(1000);
+	String Interesses = "";
+        while(cur.hasNext()) {
+                DBObject obj = cur.next();
+		
+		myStm.executeQuery("SELECT Interesses, Introducao FROM author WHERE profileID = '" + obj.get("_id").toString() + "';");
+		ResultSet rs = myStm.getResultSet();
+		if (rs.next()) {
+			if (rs.getString("Interesses") != null && rs.getString("Introducao") != null) {
+				Interesses = rs.getString("Interesses") + rs.getString("Introducao");
+				obj.put("Interesses",Interesses);
+				//System.out.print(obj.get("_id").toString());
+				//System.out.println(" > " + Interesses);
+				collResult.save(obj);
+			}
+		}
+
+        }
+
+
 	
         mongoConn.close();
+	try {
+        	myStm.close();
+        } catch (Exception ex) {}
+
     }
 
     private static int checkSum(DBCursor cur) {
