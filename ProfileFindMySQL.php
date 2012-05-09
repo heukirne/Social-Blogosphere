@@ -3,8 +3,13 @@
 // 41 days for 2 million user in pages of 25 each 30s and 50% probability
 $local = 'BR';
 $getAtuhorBR = "http://www.blogger.com/profile-find.g?t=l&loc0=$local&start=:i&ct=:ct";
-$link = mysql_connect('localhost', 'gemeos110', 'none');
-mysql_select_db('gemeos110');
+
+$configFile = file_get_contents('Class/my_config.properties');
+preg_match_all("/\n([^=]*)=(.*)/", $configFile, $config);
+
+$link = mysql_connect($config[2][1], $config[2][2], $config[2][3]);
+
+mysql_select_db('bloganalysis');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
 }

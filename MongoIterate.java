@@ -21,10 +21,10 @@ import java.util.concurrent.*;
  
 public class MongoIterate {
  
-	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=myself&password=myself";
+	public static String myConnString = "jdbc:mysql://localhost/bloganalysis?user=&password=";
 	public static final int mongoPort = 27017;
-	public static final String mongoHost = "localhost";
-	public static final int numCrawler = 4;
+	public static String mongoHost = "localhost";
+	public static final int numCrawler = 10;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -32,6 +32,11 @@ public class MongoIterate {
 	public static Statement myStm;
 	
     public static void main(String[] args) throws Exception {		
+
+Properties configFile = new Properties();
+configFile.load( new FileInputStream("my_config.properties"));
+myConnString = configFile.getProperty("MYCONN");
+mongoHost = configFile.getProperty("MYHOST");
 
 		mongoConn = new Mongo( mongoHost , mongoPort );
 		mongoDb = mongoConn.getDB( "blogdb" );

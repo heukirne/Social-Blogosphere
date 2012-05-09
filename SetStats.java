@@ -12,7 +12,7 @@ import java.io.*;
  
 public class SetStats {
  
-	public static final String myConnString = "jdbc:mysql://143.54.12.###/bloganalysis?user=profile&password=profile";
+	public static final String myConnString = "jdbc:mysql://localhost/bloganalysis?user=&password=";
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -21,7 +21,11 @@ public class SetStats {
 	
     public static void main(String[] args) throws Exception {		
 	
-		mongoConn = new Mongo( "143.54.12.###" , 27017 );
+Properties configFile = new Properties();
+configFile.load( new FileInputStream("my_config.properties"));
+myConnString = configFile.getProperty("MYCONN");
+
+		mongoConn = new Mongo( configFile.getProperty("MYHOST") , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
