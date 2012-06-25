@@ -11,7 +11,7 @@ function normalize($name) {
 // Google don't like flood requests
 // 231 days for 2 million users profile page each 10s
 $getAuthorInfo = "http://www.blogger.com/profile/";
-$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo','Interesses','Introducao','email','nome');
+$propArray = array('Local','Atividade','Signo_astrologico','Profissao','Sexo','Interesses','Introducao','email','nome','plusID','views','since');
 
 $configFile = file_get_contents('Class/my_config.properties');
 preg_match_all("/\n([^=]*)=(.*)/", $configFile, $config);
@@ -30,21 +30,14 @@ while (true) {
 	$iA++;
 	//echo ($iA).", ";
 	
-	$sql = "SELECT profileID as id FROM author WHERE Find < 5 ORDER BY RAND() LIMIT 1";
-	$result = mysql_query($sql);
-	if ($result) {
-		$num_rows = mysql_num_rows($result);
-		$author = mysql_fetch_assoc($result);
-		mysql_free_result($result);
-		if ($num_rows==0) break;
-	} else {
-		echo "\n".mysql_error()."\n";
-		sleep(20);
-		mysql_select_db('bloganalysis');
-		mysql_query("set wait_timeout = 7200");
-		continue;
-	}	
 	
+	$sql = "SELECT profileID as id FROM author WHERE Find < 5 ORDER BY RAND() LIMIT 50";
+	$resultMY = mysql_query($sql);
+	$num_rows = mysql_num_rows($resultMY);
+	if ($num_rows==0) break;
+
+	while($author = mysql_fetch_assoc($resultMY)) {
+	//$author['id'] = '04145451133565818637';
 	if (@$html = file_get_contents($getAuthorInfo.$author['id'])) {
 		$html = str_replace('strong','b',$html);
 		preg_match_all("/=\"item-key\"\>([^<]*)<\/th>(\n)?([^<]*)(.*)/", $html, $listItens); 
@@ -55,10 +48,6 @@ while (true) {
 $blogroll = "";
 foreach($arBlogroll[1] as $itemRoll)
 	if (strpos($itemRoll,'://')>0) $blogroll .= $itemRoll.', ';
-
-$since = $arView[1][count($arView[1])-2];
-$views = $arView[1][count($arView[1])-1];
-
 
 		$prop = array();
 		foreach ($listItens[1] as $i => $name) {
@@ -89,27 +78,35 @@ $views = $arView[1][count($arView[1])-1];
 				$prop[$i] = str_replace('<.tr>','',$prop[$i]);
 			}
 		}  
+
+                preg_match_all("/plus.google.com.(\d+)&quot;,null,&quot;([^\&]+)/", $html, $plus);
+                if (isset($plus[1][0])) { 
+			$prop['plusID'] = html_entity_decode($plus[1][0]);
+			$prop['nome'] = html_entity_decode($plus[2][0]); 
+		} else {
+
+		$prop['since'] = $arView[1][count($arView[1])-2]*1;
+		$prop['views'] = $arView[1][count($arView[1])-1]*1;
 		
 		preg_match_all("/printEmail\(\"([^\"]+)\"/", $html, $email);
 		if (isset($email[1][0])) { $prop['email'] = substr($email[1][0],4,-4); }
 
 		preg_match_all("/appname fn\"\>([^\<]+)\</", $html, $nome);
-		if ($nome) { $prop['nome'] = html_entity_decode($nome[1][0]); }
+		if (isset($nome[1][0])) { $prop['nome'] = html_entity_decode($nome[1][0]); }
 		
-
+		}
+		
 		//print_r($prop);
 		//die();
 	
 		$sql = "UPDATE author SET ";
 		foreach ($propArray as $name) {
 			if (!empty($prop[$name])) {
-				$sql .= "$name = '{$prop[$name]}', ";
+				$sql .= "$name = '".mysql_real_escape_string($prop[$name])."', ";
 			}
 		}
 		$sql .= " Blogs = '".implode(',',$blogs[1])."',";
-		$sql .= " views = ".($views*1).",";
 		$sql .= " blogroll = '$blogroll',";
-		$sql .= " since = ".($since*1).",";
 		$sql .= " Find = 5";
 		$sql .= " WHERE profileID = '{$author['id']}' limit 1;";		
 		echo "+".$author['id'];
@@ -127,10 +124,11 @@ $views = $arView[1][count($arView[1])-1];
 			echo "#";
 		}
 	}
-	//echo $sql;
+	//echo $sql."\n";
 	//die();
-	mysql_query($sql);
+	if(!mysql_query($sql))
+		echo 'Error ' . mysql_error();
 	sleep(7);
-	
+	}	
 }
 mysql_close($link);

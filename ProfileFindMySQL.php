@@ -8,12 +8,12 @@ $configFile = file_get_contents('Class/my_config.properties');
 preg_match_all("/\n([^=]*)=(.*)/", $configFile, $config);
 
 $link = mysql_connect($config[2][1], $config[2][2], $config[2][3]);
-
-mysql_select_db('bloganalysis');
 if (!$link) {
     die('Could not connect: ' . mysql_error());
 }
+mysql_select_db('bloganalysis');
 mysql_query("set wait_timeout = 7200");
+
 
 while (true) {
 	$ct = array(1 => array(0 => ""));

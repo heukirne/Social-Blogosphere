@@ -16,14 +16,14 @@ import java.io.*;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.concurrent.*;
-
+ 
 public class GetBlogId {
  
 	public static String myConnString = "jdbc:mysql://localhost/bloganalysis?user=&password=";
-	public static final int numCrawler = 10;
+	public static final int numCrawler = 2;
 	public static Connection mysqlConn;
 	public static Statement myStm;
-
+	
     public static void main(String[] args) throws Exception {		
 
 Properties configFile = new Properties();
@@ -63,17 +63,23 @@ myConnString = configFile.getProperty("MYCONN");
 		while(true)
 		{
 			blogs = null;
-			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE length(Blogs)>2 and retrieve=0 ORDER BY RAND() DESC LIMIT 1");
+			myStm.executeQuery("SELECT CONCAT_WS('',profileID,'£',blogroll,',',blogs) as info FROM author WHERE retrieve < 10 and find = 5 LIMIT 10");
+
 			rs = myStm.getResultSet();
 			try {
-				if (rs.first()) {
-					blogs = Pattern.compile("#").split(rs.getString("info"));
-				}
+			if (!rs.first()) Thread.sleep(60000);
+			if (false) break;
+			while (rs.next()) {
+				//System.out.println(rs.getString("info"));
+				blogs = Pattern.compile("£").split(rs.getString("info"));
+				//System.out.println("+"+blogs[0]);
+				//if (blogs!=null) {
+                        		if (!queue.offer(blogs,60,TimeUnit.SECONDS)) {
+                                		System.out.println("Offer.Timeout");
+                        		}
+				//}
+			}
 			} catch (Exception e) {}
-
-			if (blogs==null) break;
-
-			queue.put(blogs);
 
 		}
 
@@ -108,10 +114,12 @@ class CrawlerG extends Thread {
 
 			myService = new BloggerService("Mongo-BlogFeed-"+r);
 			//myService.setReadTimeout(3000);
-
+	
 			mysqlConn = DriverManager.getConnection(GetBlogId.myConnString);
 			myStm = mysqlConn.createStatement();
 			myStm.executeQuery("set wait_timeout = 7200");
+
+			//System.out.println(r+": Start()");
 		} catch (Exception e) {
 			System.out.println(r+"bye:" + e.getMessage());
 		}
@@ -121,7 +129,15 @@ class CrawlerG extends Thread {
     	while (true) {
 
 	    	try { 
-				String[] info = q.take();
+				//System.out.println(r+": Take(wait)");
+				//String[] info = q.take();
+				String[] info = q.poll(60,TimeUnit.SECONDS);
+                        	if (info == null) {
+                                	System.out.println("Poll.Timeout");
+					continue;
+                        	}	
+
+				//System.out.println(r+": Take(get)");
 				String[] blogs = null;
 				String profileID = "";
 
@@ -132,32 +148,32 @@ class CrawlerG extends Thread {
 				if (info.length == 2) {
 					profileID = info[0];
 					blogs = Pattern.compile(",").split(info[1]);
-				} else {
-					blogs = info;
-				}
+				} else continue;
 
 				Boolean bSet = false;
-	myStm.executeUpdate("UPDATE author SET retrieve = 9 WHERE profileID = '" + profileID + "' LIMIT 1");
-	    		for (String blogFind : blogs)
+	myStm.executeUpdate("UPDATE author SET retrieve = 10 WHERE profileID = '" + profileID + "' LIMIT 1");
+	//System.out.println(r+": "+profileID+" - "+ blogs.toString());
+	    		for (String blog : blogs)
 				{
-					blog = blogFind;
-					String blogID = blog.trim().replace("http:","").replace("/","");
+		if (blog.indexOf("http:")==-1) { System.out.println(r+": continue - "+blog);  continue; }
+		String blogID = blog.trim().replace("http:","").replace("/","");
 
-                URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogID + "/posts/default");
+                URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogID + "/comments/default");
                 if (!blogID.matches("\\d+")) {
-                        feedUrl = new URL("http://" + blogID + "/feeds/posts/default");
+                        feedUrl = new URL("http://" + blogID + "/feeds/comments/default");
                 }
 
                 Query myQuery = new Query(feedUrl);
                 myQuery.setMaxResults(1);
 
+		//System.out.println(r+": Feed()");
 		Feed resultFeed = myService.query(myQuery, Feed.class);
                 Matcher matcher = Pattern.compile("\\d+").matcher(resultFeed.getSelfLink().getHref());
                 if (matcher.find()) {
 			blogID = matcher.group(); 
-			System.out.println(blogID);
+			System.out.println(r+": "+blogID);
 			try {
-				myStm.executeUpdate("INSERT INTO blogs SET blogID = '" + blogID + "'");
+				myStm.executeUpdate("INSERT INTO blogs SET blogID = '" + blogID + "', totalComments = "+resultFeed.getTotalResults()+" ON DUPLICATE KEY UPDATE totalComments = "+resultFeed.getTotalResults());
 			} catch (Exception e) { }
 
 		}
@@ -167,7 +183,7 @@ class CrawlerG extends Thread {
 				}
 
 			} catch (Exception e) {
-				System.out.println(r+"runEx:" + e.getMessage());
+				System.out.println(r+"runEx:" + e.getMessage() + blog);
 			}
 
 		}

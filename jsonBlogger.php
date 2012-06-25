@@ -12,23 +12,33 @@ if (!$link) {
 }
 mysql_query("set wait_timeout = 7200");
 
-$client = new apiClient();
-//$client->setUseObjects(true);
-$client->setDeveloperKey('{API-KEY}');
-$service = new apiBloggerService($client);
-
 while (1) {
 
-$sql = "SELECT blogID FROM blogs WHERE url is null ORDER BY RAND() LIMIT 1";
+$sql = "SELECT blogID FROM blogs WHERE url is null LIMIT 20";
 $result = mysql_query($sql);
+if (mysql_num_rows($result)<5) {sleep(60); continue;}
 while($row = mysql_fetch_assoc($result)) {
+
+$sql = "SELECT apiKey FROM GoogleApiKey WHERE timediff(now(),date) > 9 ORDER BY Date ASC LIMIT 1";
+$apiRS = mysql_query($sql);
+if (mysql_num_rows($apiRS)==0) {sleep(9); continue;}
+$apiKey = mysql_fetch_assoc($apiRS);
+
+$client = new apiClient();
+$client->setDeveloperKey($apiKey['apiKey']);
+$service = new apiBloggerService($client);
+
+$sql = "UPDATE GoogleApiKey SET Date = NOW() WHERE apiKey = '{$apiKey['apiKey']}' LIMIT 1; ";
+mysql_query($sql);
 
 try {
    $blog = $service->blogs->get($row['blogID']);
 } catch (Exception $e) {
    echo $e->getCode();
-   if ($e->getCode()==403 || $e->getCode()==400) die('die');
-   else {
+   if ($e->getCode()==403 || $e->getCode()==400) {
+	$sql = "UPDATE GoogleApiKey SET Date = '2020-01-01' WHERE apiKey = '{$apiKey['apiKey']}' LIMIT 1; ";
+	mysql_query($sql);   
+   } else {
 	$sql = "UPDATE blogs SET url = '' WHERE blogID = '{$row['blogID']}' LIMIT 1; ";
 	mysql_query($sql);
    }
@@ -41,8 +51,8 @@ $blog['published'] = date('Y-m-d h:i:s', $blog['published']);
 $blog['updated'] = strtotime($blog['updated']);
 $blog['updated'] = date('Y-m-d h:i:s', $blog['updated']);
 
-$blog['description'] = preg_replace("/'/","",utf8_decode($blog['description']));
-$blog['name'] = preg_replace("/'/","",utf8_decode($blog['name']));
+$blog['description'] = preg_replace("/['\\\?\/]/","",utf8_decode($blog['description']));
+$blog['name'] = preg_replace("/['\\\?\/]/","",utf8_decode($blog['name']));
 
 //Monta SQL
 $sql = "UPDATE blogs SET name = '{$blog['name']}', description = '{$blog['description']}', ";
@@ -54,8 +64,8 @@ $sql .= " WHERE blogID ='{$blog['id']}' LIMIT 1;";
 
 //echo $sql."\n";
 echo "+";
-mysql_query($sql);
-sleep(5);
+if(!mysql_query($sql))
+    echo mysql_error();
 
 }
 }
