@@ -30,11 +30,12 @@ public class TfIdf_KMeans {
 		
 		String mapContent =	"function(){ " +
 							"   if (this.content)" +
-							"	idP = this.postID;"+
-							"	this.content.replace(/[\\n\\W\\d]/g,' ').replace(/\\s+/g,' ').split(' ').forEach( " +
+							"	tags = this.tags;"+
+							"	this.title.replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').split(' ').forEach( " +
 							"		function(word){ " +
-							"			emit( {id:idP, term:word.trim().toLowerCase()}, 1 ); "+
-							"		} "+
+							"		tags.forEach(function(stag){ " +
+							"			emit( {tag:stag.trim().toLowerCase(), term:word.trim().toLowerCase()}, 1 ); "+
+							"		} ); }"+
 							"	); "+
 							"};";							
 
@@ -68,7 +69,7 @@ String mapCorpusK = "function() {"+
 	DBObject docQuery = query.start("numComments").is(10).and("content").notEquals("").get();
 	docQuery = query.start("authorID").is("02172750966394283544").get();
 
-	MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "words_tf", MapReduceCommand.OutputType.REPLACE, docQuery);
+	MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "tfidf_title", MapReduceCommand.OutputType.REPLACE, docQuery);
 /*
 	DBCollection collWords = mongoDb.getCollection("WordSubst");
 
