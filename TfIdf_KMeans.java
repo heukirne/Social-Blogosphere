@@ -5,16 +5,19 @@ import java.util.*;
 import java.net.*;
 import java.io.*;
 import java.text.Normalizer;
- 
+ /*
+226m Tag TF, 5m Tag N, 13m Tag K, 150m Join N, 60m Join K, 30m TFIDF
+18m Doc TF, 1m Doc N, 3m Doc K, 20m Join N, 15m Join K, 8m TFIDF
+ */
 public class TfIdf_KMeans {
   
 	private static Mongo mongoConn;
 	private static DB mongoDb;
-	private static DBCollection collSWords, collWords, collPosts;
+	private static DBCollection collTFIDFN, collTFIDF, collPosts;
 	
     public static void main(String[] args) throws Exception {		
 
-		mongoConn = new Mongo( "localhost" , 27018 );
+		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -23,21 +26,29 @@ public class TfIdf_KMeans {
 			System.out.println("MongoDB Offline.");
 			System.exit(1);
 		}
-		
-		collSWords = mongoDb.getCollection("stopWords");	
-		collWords = mongoDb.getCollection("words_popular");
+			
+		collTFIDF = mongoDb.getCollection("tfidf_word5");
 		collPosts = mongoDb.getCollection("posts");
 		
-		String mapContent =	"function(){ " +
-							"   if (this.content)" +
+		String mapContentTag =	"function(){ " +
+							"   if (this.content) {" +
 							"	tags = this.tags;"+
-							"	this.title.replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').split(' ').forEach( " +
+							"	this.content.replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').split(' ').forEach( " +
 							"		function(word){ " +
 							"		tags.forEach(function(stag){ " +
-							"			emit( {tag:stag.trim().toLowerCase(), term:word.trim().toLowerCase()}, 1 ); "+
+							"			if (word.trim().length > 0 && stag.trim().length > 0) " +
+							"			emit( {tag:stag.toLowerCase().replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').trim(), term:word.trim().toLowerCase()}, 1 ); "+
 							"		} ); }"+
-							"	); "+
+							"	); } "+
 							"};";							
+
+		String mapContentWord =	"function(){ " +
+							" var postID = this.postID; " +
+							"	this.content.replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').split(' ').forEach( " +
+							"		function(word){ " +
+							"			emit( {id:postID, term:word.trim().toLowerCase()}, 1 ); "+
+							"   } );"+
+							"};";	
 
         String reduceWords = "function( key , values ){ "+
 							"	var totCom = 0; " +
@@ -47,8 +58,8 @@ public class TfIdf_KMeans {
 							"	return totCom; "+
 							"};";							
 		
-String mapDocK = "function() {"+
-				" emit(this._id.id.replace('\"','').trim(), {word: this._id.word, count: this.value}) " +
+String mapDocN = "function() {"+
+				" emit(this._id.id, this.value) " +
 				"};";
 
 
@@ -60,16 +71,62 @@ String redDocK = "function(key, values) {"+
 					"return { word: 0 , count: tot };"+
 				"};";
 
-String mapCorpusK = "function() {"+
-				" emit(this._id.word, 1); " +
+String mapCorpusm = "function() {"+
+				" emit(this._id.term, 1); " +
 				"};";
 
 
 	QueryBuilder query = new QueryBuilder();
 	DBObject docQuery = query.start("numComments").is(10).and("content").notEquals("").get();
-	docQuery = query.start("authorID").is("02172750966394283544").get();
+	docQuery = query.start("tags").size(5).get();
 
-	MapReduceOutput output = collPosts.mapReduce(mapContent, reduceWords, "tfidf_title", MapReduceCommand.OutputType.REPLACE, docQuery);
+	MapReduceOutput output = collTFIDF.mapReduce(mapDocN, reduceWords, "tfidf_word5N", MapReduceCommand.OutputType.REPLACE, null);
+
+
+
+/*
+db.tfidf_word5.ensureIndex({"_id.id":1}); 
+db.tfidf_word5.ensureIndex({"_id.term":1}); 
+
+db.tfidf_word5N.find().forEach(function(d){db.tfidf_word5.update({"_id.id":d._id},{$set:{N:d.value}},false,true)});
+db.tfidf_word5m.find().forEach(function(d){db.tfidf_word5.update({"_id.term":d._id,m:{$exists:false}},{$set:{m:d.value}},false,true)});
+
+D = db.tfidf_word5N.count();
+db.tfidf_word5.find().forEach(function(d){d.tfidf = (d.value/d.N)*Math.log(D/d.m); db.tfidf_word5.save(d)});
+
+
+docQuery = query.start("authorID").exists(false).get();
+DBObject queryDoc;
+DBCursor curDoc;
+DBObject obj, objList;
+DBCursor cur = collTFIDFN.find(docQuery);
+BasicDBObject sortDoc = new BasicDBObject();
+sortDoc.put("tfidf", -1);
+BasicDBList list = new BasicDBList();
+
+while(cur.hasNext()) {
+	obj = cur.next();
+
+	/*queryDoc = query.start("_id.id").is(obj.get("_id").toString()).get();
+	curDoc = collTFIDF.find(queryDoc).sort(sortDoc).limit(10);
+	
+	list = new BasicDBList();
+	while(curDoc.hasNext()) {
+		objList = curDoc.next();
+		list.add(list.size(), ((DBObject)objList.get("_id")).get("term").toString());
+	}
+	obj.put("list", list); 
+
+	//System.out.println(obj.get("_id").toString());
+	queryDoc = query.start("postID").is(obj.get("_id").toString()).get();
+	objList = collPosts.findOne(queryDoc);
+	//System.out.println(objList.get("authorID").toString());
+	obj.put("authorID",objList.get("authorID").toString());
+
+
+	collTFIDFN.save(obj);
+}
+
 /*
 	DBCollection collWords = mongoDb.getCollection("WordSubst");
 

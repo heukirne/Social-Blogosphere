@@ -21,11 +21,11 @@ public class SetStats {
 	
     public static void main(String[] args) throws Exception {		
 	
-Properties configFile = new Properties();
-configFile.load( new FileInputStream("my_config.properties"));
-myConnString = configFile.getProperty("MYCONN");
+//Properties configFile = new Properties();
+//configFile.load( new FileInputStream("my_config.properties"));
+//myConnString = configFile.getProperty("MYCONN");
 
-		mongoConn = new Mongo( configFile.getProperty("MYHOST") , 27017 );
+		mongoConn = new Mongo( "localhost" , 27017 );
 		mongoDb = mongoConn.getDB( "blogdb" );
 		
 		try {
@@ -36,10 +36,10 @@ myConnString = configFile.getProperty("MYCONN");
 		}
 
 		collPosts = mongoDb.getCollection("posts");
-		collPosts.ensureIndex("postID");
-		collPosts.ensureIndex("blogID");
-		collPosts.ensureIndex("authorID");		
-		
+		//collPosts.ensureIndex("postID");
+		//collPosts.ensureIndex("blogID");
+		//collPosts.ensureIndex("authorID");		
+/*
 		try {
 		mysqlConn = DriverManager.getConnection(myConnString);
 		myStm = mysqlConn.createStatement();
@@ -55,10 +55,23 @@ myStm.executeQuery("SELECT sum(1+length(blogs)-length(replace(blogs,',',''))) as
 ResultSet rs = myStm.getResultSet();
 rs.next();
 blogsTotal = rs.getInt("cont");
+*/
 
 String mapBlogs =	"function(){ " +
 "	emit( this.blogID , { posts: 1 , comments: this.comments.length } ); "+
 "	};";							
+
+//ver tags e autores e ver se a recomendação pega eles
+String mapAuthor =	"function(){ " +
+" idAuthor = this.authorID;"+
+"  this.tags.forEach(function(sTag){ " +
+"	emit( {id:idAuthor, tag:sTag}, 1 ); "+
+"	})};";	
+
+String mapTags =	"function(){ " +
+"  this.tags.forEach(function(sTag){ " +
+"	emit( sTag.toLowerCase().replace(/[\\W\\d]/g,' ').replace(/\\s+/g,' ').trim(), 1 ); "+
+"	})};";	
 
 String mapHistory =       "function(){ " +
 " 	var day = this._id.getTimestamp().getFullYear() + '.';"+
@@ -67,7 +80,7 @@ String mapHistory =       "function(){ " +
 "       emit( day , 1 ); "+
 "  };";
 
-String reduceHistory = "function( key , values ){ "+
+String reduceCommon = "function( key , values ){ "+
 " var totCom = 0; " +
 " values.forEach(function(value) {"+
 " 	totCom += value;"+
@@ -86,8 +99,8 @@ QueryBuilder query = new QueryBuilder();
 DBObject docMin = query.start("numComments").greaterThanEquals(1).get();
 DBObject docPop = query.start("value").greaterThanEquals(25).get();
 
-DBObject docQuery = query.start("numComments").greaterThanEquals(20).get();
-MapReduceOutput output = collPosts.mapReduce(mapBlogs, reduceBlogs, "blogStats", MapReduceCommand.OutputType.REPLACE, null);
+DBObject docQuery = query.start("tags").size(5).get();
+MapReduceOutput output = collPosts.mapReduce(mapTags, reduceCommon, "allTags", MapReduceCommand.OutputType.REPLACE, docQuery);
 //MapReduceOutput output = collPosts.mapReduce(mapHistory, reduceHistory, "history", MapReduceCommand.OutputType.REPLACE ,null);
 
 /*
