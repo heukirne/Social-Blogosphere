@@ -60,8 +60,8 @@ public class RecoTags {
 
 		/*Get Title words*/
 		DBCollection collPosts = mongoDb.getCollection("posts");
-		DBObject queryPosts = query.start("tags").is(tag).and("tagNum").is(5).get();//and(tag).exists(true).get();
-		DBCursor curPosts = collPosts.find(queryPosts);
+		DBObject queryPosts = query.start("tags").is(tag).get();//.and("tagNum").is(5).get();//and(tag).exists(true).get();
+		DBCursor curPosts = collPosts.find(queryPosts);//.limit(10);
 
 		DBCollection collDocWords = mongoDb.getCollection("tfidf_word5");
 		DBObject queryDocWords;
@@ -69,18 +69,19 @@ public class RecoTags {
 		BasicDBList list = new BasicDBList();
 		String content = "";
 		String[] parts;
-		Double value,cont,tfWord,mean,deviation,total,docNorm;
+		Double value,cont,tfWord,total,docNorm;
 		Long totalL;
+		Integer prod;
 		totalL = collPosts.getCount(queryPosts);
 		total = totalL.doubleValue();
-		mean=deviation=docNorm=0d;
+		docNorm=0d;
 		while(curPosts.hasNext()) {
 			cont = 0d;
 			DBObject doc = curPosts.next();
 
-			
+			/* Compara Doc TFIDF with Tag TFIDF/
 			queryDocWords = query.start("_id.id").is(doc.get("postID").toString()).get();
-			DBCursor curWords = collDocWords.find(queryDocWords).sort(sortDoc).limit(numDoc);
+			DBCursor curWords = collDocWords.find(queryDocWords).sort(sortDoc);//.limit(numDoc);
 			while(curWords.hasNext()) {
 				DBObject word = curWords.next();
 				term = ((BasicDBObject)word.get("_id")).getString("term"); 
@@ -91,17 +92,34 @@ public class RecoTags {
 			}
 			docNorm = Math.sqrt(docNorm);
 			cont = cont / (docNorm * termNorm);
-			
-			/*
+			/**/
+
+			Map<String, Double> docMap = new HashMap<String, Double>();
+			cont =0d;
 			content = doc.get("content").toString();
 			parts = Pattern.compile("\\s").split(content.replaceAll("[\\W\\d]"," ").replaceAll("\\s+"," "));
 			for (String part : parts) {
-				value = termMap.get(part.toLowerCase());
-				if (value!=null) cont += value;
-			}
-			*/
+				Double oldCount = docMap.get(part.toLowerCase());
+				docMap.put(part, oldCount == null ? 1 : oldCount + 1);
 
-			/*
+				//value = termMap.get(part.toLowerCase());
+				//if (value!=null) cont += value;
+			}
+
+			
+			docNorm = 0d;
+			for (Double count : docMap.values()) {
+			    docNorm += count * count;
+			}
+			docNorm = Math.sqrt(docNorm);
+			for(String w: termMap.keySet()) {
+				value = docMap.get(w);
+				if (value!=null) cont += value*termMap.get(w);
+			}
+			cont = cont / (docNorm * termNorm);
+			
+
+			/* Add Similar Tag to list /
 			if (cont > 0d) {
 
 				list = new BasicDBList();
@@ -112,29 +130,18 @@ public class RecoTags {
 				doc.put("listTag", list); 
 				collPosts.save(doc);
 			}
-			*/
+			/**/
 
-			//mean+=cont;
-			//deviation+=cont*cont;
-			doc.put(tag+"F",cont);
+			doc.put(tag,cont);
 			collPosts.save(doc);
-			//System.out.println(doc.get("postID").toString());
 		}
 
-		//deviation = Math.sqrt((deviation - ((mean*mean)/total))/(total-1));
-		//mean=mean/total;
-		//System.out.println(numWords+" palavras em "+tag);
-		//System.out.println("Total:"+total);
-		DBObject queryAccur = query.start("tags").is(tag).and(tag).greaterThan(0).get();
-		queryPosts = query.start("tags").is(tag).and(tag).exists(true).get();
+		System.out.println(numWords+" palavras em "+tag);
+		DBObject queryAccur = query.start("tags").is(tag).and(tag).greaterThan(0.001).get();
 		//System.out.println(tag+":"+collPosts.getCount(queryAccur));
-		//queryPosts = query.start("tags").size(5).and("listTag").is(tag).get();
 		//DBObject queryAccur = query.start("tags").size(5).and("listTag").is(tag).get();
-		System.out.println(tag+" Tags:"+collPosts.getCount(queryPosts));
+		System.out.println(tag+" Tags:"+totalL);
 		System.out.println(tag+" Tags Find:"+collPosts.getCount(queryAccur));
-		//System.out.println("Mean:"+mean);
-		//System.out.println("Deviation:"+deviation);
-
 
         mongoConn.close();
     }
