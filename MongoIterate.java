@@ -11,6 +11,12 @@ import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.DriverManager;
 
+import org.apache.lucene.analysis.br.*;
+import org.apache.lucene.analysis.*;
+import org.apache.lucene.analysis.tokenattributes.*;
+import org.apache.lucene.analysis.snowball.*;
+import org.apache.lucene.util.*;
+
 import java.util.regex.*;
 import java.util.*;
 import java.net.*;
@@ -24,12 +30,15 @@ public class MongoIterate {
 	public static String myConnString = "jdbc:mysql://localhost/bloganalysis?user=&password=";
 	public static final int mongoPort = 27017;
 	public static String mongoHost = "localhost";
-	public static final int numCrawler = 10;
+	public static final int numCrawler = 2;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
 	public static Connection mysqlConn;
 	public static Statement myStm;
+	private final static String[] arStopWords = {"http", "www", "par", "no", "ser", "muit", "tem", "foi", "pod", "faz", "ja", "sao", "voc", "ate", "pel", "dia", "eu", "bem", "fic", "nov", "so", "pass", "ter", "for", "part", "sab", "vez", "cas", "aqu", "com", "primeir", "me", "dev", "temp", "deix", "grand", "algum", "melhor", "noss", "cont", "hoj", "vai", "anos", "sempr", "pesso", "trabalh", "la", "segund", "agor", "vid", "fal", "form", "minh", "pra", "conhec", "comec", "cois", "diz", "ond", "maior", "pouc", "cheg", "dess", "cad", "mund", "quer", "encontr", "meu", "ver", "bom", "apen", "diss", "mei", "esta", "lev", "gost", "era", "volt", "tenh", "estav", "ultim", "precis", "dois", "feit", "ano", "nad", "acontec", "fot", "alguns", "brasil", "marc", "estar", "post", "tant", "final", "esper", "mostr", "public", "viv", "tao", "amig", "hor", "segu", "cham", "sent", "histor", "dias", "dar", "num", "moment", "seman", "apresent", "acab", "mes", "ai", "pens", "torn", "parec", "receb", "coloc", "nom", "cri", "blog", "tinh", "continu", "tom", "consegu", "font", "vem", "lad", "cert"};
+	public static Set<String> stopStemmWords;
+	public static Analyzer analyzer;
 	
     public static void main(String[] args) throws Exception {		
 
@@ -57,6 +66,9 @@ mongoHost = configFile.getProperty("MYHOST");
 			System.exit(1);
 		}
 		
+		stopStemmWords = new HashSet<String>(Arrays.asList(arStopWords));
+		analyzer = new BrazilianAnalyzer(Version.LUCENE_36);
+
 		collPosts = mongoDb.getCollection("posts");
 		collPosts.ensureIndex("postID");
 		collPosts.ensureIndex("blogID");
@@ -75,7 +87,7 @@ mongoHost = configFile.getProperty("MYHOST");
 	public static void getBlogs() throws Exception 
 	{
 
-		BlockingQueue<String[]> queue = new ArrayBlockingQueue<String[]>(numCrawler*4);
+		BlockingQueue<String> queue = new ArrayBlockingQueue<String>(numCrawler*4);
 
 		CrawlerM[] crawler = new CrawlerM[numCrawler];
 		for (int i=0; i<crawler.length; i++) {
@@ -84,28 +96,18 @@ mongoHost = configFile.getProperty("MYHOST");
 		}
 
 		ResultSet rs = null;
-		String[] blogs;
-
 		while(true)
 		{
-			blogs = null;
-			myStm.executeQuery("SELECT CONCAT(profileID, '#' , blogs) as info FROM author WHERE Local = 'BR' and length(Blogs)>2 AND Find=1 AND retrieve=0 ORDER BY RAND() DESC LIMIT 1");
+			myStm.executeQuery("SELECT blogID FROM blogBR WHERE Get=0 ORDER BY RAND() DESC LIMIT 10");
 			rs = myStm.getResultSet();
 			try {
-				if (true && rs.first()) {
-					blogs = Pattern.compile("#").split(rs.getString("info"));
-				} else {
-					blogs = getBlogFromMongo();
+				if (!rs.first()) break;
+				while (rs.next()) {
+            		if (!queue.offer(rs.getString("blogID"),60,TimeUnit.SECONDS)) {
+                    		System.out.println("Offer.Timeout");
+            		}
 				}
 			} catch (Exception e) {}
-
-			if (blogs==null) break;
-
-			queue.put(blogs);
-
-			if (queue.size() >= (numCrawler*2)) {
-				myStm.executeUpdate("UPDATE neo4jstats SET posts = " + collPosts.getCount() + " LIMIT 1");
-			}
 
 		}
 
@@ -143,6 +145,33 @@ mongoHost = configFile.getProperty("MYHOST");
 
 	}
 
+	public static String Stem(String text, Analyzer analyzer, Set<String> stopStemmWords){
+        StringBuffer result = new StringBuffer();
+        if (text!=null && text.trim().length()>0){
+
+        	text = text.replaceAll("[\\W\\d_]"," ").replaceAll("\\s+"," "); //need to remove underline "no"
+            StringReader tReader = new StringReader(text);
+            TokenStream tStream = analyzer.tokenStream("contents", tReader);
+            TermAttribute term = tStream.addAttribute(TermAttribute.class);
+
+            try {
+                while (tStream.incrementToken()){
+                    if (!stopStemmWords.contains(term.term()) && term.term().length() > 2) {
+                    	result.append(term.term());
+                    	result.append(" ");
+                    }
+                }
+            } catch (IOException ioe){
+                System.out.println("Error: "+ioe.getMessage());
+            }
+        }
+
+        // If, for some reason, the stemming did not happen, return the original text
+        if (result.length()==0)
+            result.append(text);
+        return result.toString().trim();
+		}
+
 }
 
 class CrawlerM extends Thread {
@@ -157,11 +186,11 @@ class CrawlerM extends Thread {
 	public static Connection mysqlConn;
 	public static Statement myStm;
 
-	static final String[] NO_MORE_WORK = new String[]{};
+	static final String NO_MORE_WORK = new String("");
 
-	BlockingQueue<String[]> q;
+	BlockingQueue<String> q;
 
-    CrawlerM(BlockingQueue<String[]> q) {
+    CrawlerM(BlockingQueue<String> q) {
     	this.q = q;
 		try {
 			Random generator = new Random();
@@ -186,40 +215,14 @@ class CrawlerM extends Thread {
     	while (true) {
 
 	    	try { 
-				String[] info = q.take();
-				String[] blogs = null;
-				String profileID = "";
-		
-                if (info == NO_MORE_WORK) {
+				String blog = q.take();
+
+                if (blog == NO_MORE_WORK) {
                     break;
                 }
-
-				if (info.length == 2) {
-					profileID = info[0];
-					blogs = Pattern.compile(",").split(info[1]);
-				} else {
-					blogs = info;
-				}
-
-
-	    		for (String blogFind : blogs)
-				{
-					blog = blogFind;
-					String blogID = blog.trim().replace("http:","").replace("/","");
-					
-					myStm.executeUpdate("UPDATE author SET retrieve = 1 WHERE profileID = '" + profileID + "' LIMIT 1");
-					if (blog.matches("\\d+")) {
-						DBCollection collBlogs = mongoDb.getCollection("blogStats");
-						BasicDBObject docId = new BasicDBObject();
-				        docId.put("_id", blog);
-
-						DBObject obj = collBlogs.findOne(docId);
-						obj.put("dot",1);
-				        collBlogs.save(obj);
-					}
-
-					getPosts(blogID);
-				}
+				
+				myStm.executeUpdate("UPDATE blogBR SET Get = 1 WHERE blogID = '" + blog + "' LIMIT 1");
+				getPosts(blog);
 
 				System.out.println("Finish("+r+")");
 			} catch (Exception e) {
@@ -260,48 +263,16 @@ class CrawlerM extends Thread {
     }
 
 	private boolean getPosts(String blogUri) throws Exception {			
-		
-		SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
-		
+				
 		URL feedUrl = new URL("http://www.blogger.com/feeds/" + blogUri + "/posts/default");
-		if (!blogUri.matches("\\d+")) {
-			feedUrl = new URL("http://" + blogUri + "/feeds/posts/default");
-		} 
-
 		Query myQuery = new Query(feedUrl);
 		
-		DateTime dtMin = DateTime.parseDate("2011-01-01");
-                DateTime dtMax = DateTime.parseDate("2011-12-31");
+		DateTime dtMin = DateTime.parseDate("2012-05-01");
+        DateTime dtMax = DateTime.parseDate("2012-07-30");
 
 		myQuery.setPublishedMin(dtMin);	
 		myQuery.setPublishedMax(dtMax);
-
-		if (!blogUri.matches("\\d+")) {
-			myQuery.setMaxResults(1);
-			Feed resultFeed = feedQuery(myQuery);
-			Matcher matcher = Pattern.compile("\\d+").matcher(resultFeed.getSelfLink().getHref());
-			if (matcher.find()) {	
-				blogUri = matcher.group();
-			}
-			myQuery.setMaxResults(25);
-		}
-
-		if (blogUri.matches("\\d+")) {
-			BasicDBObject doc = new BasicDBObject();
-			doc.put("blogID", blogUri);
-			BasicDBObject sortDoc = new BasicDBObject();
-		        sortDoc.put("published", -1);
-
-	        	if (collPosts.find(doc).size() > 0) {
-			DBCursor cur = collPosts.find(doc).sort(sortDoc).limit(5);
-		        if(cur.hasNext()) {
-		        	DBObject obj = cur.next();
-		        	dtMin = new DateTime((Date)obj.get("published"));
-				myQuery.setPublishedMin(dtMin);
-		        }
-	        }
-
-		}
+		myQuery.setMaxResults(25);
 
 		Feed resultFeed = feedQuery(myQuery);
 		
@@ -352,10 +323,10 @@ class CrawlerM extends Thread {
 			for (Entry entry : resultFeed.getEntries())
 			{
 				if (entry.getAuthors().get(0).getUri()!=null) {
-					String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
-					if (profileID.matches("\\d+")) {
+					//String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+					//if (profileID.matches("\\d+")) {
 						setMongoComment(postUri, entry);
-					}
+					//}
 				}
 				count++; 
 			}
@@ -379,8 +350,8 @@ class CrawlerM extends Thread {
 			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
 			doc.put("authorID", authorID);
 			
-			Date published = new Date(entry.getPublished().getValue());
-			doc.put("published", published);
+			//Date published = new Date(entry.getPublished().getValue());
+			//doc.put("published", published);
 			
 			String title = Normalizer.normalize(entry.getTitle().getPlainText(), Normalizer.Form.NFD);
 			title = title.replaceAll("[^\\p{ASCII}]", "");
@@ -389,6 +360,7 @@ class CrawlerM extends Thread {
 			if (entry.getContent()!=null) {
 				String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
 				content = content.replaceAll("[^\\p{ASCII}]", "");
+				content = MongoIterate.Stem(content, MongoIterate.analyzer, MongoIterate.stopStemmWords);
 				doc.put("content", content);
 			}
 
@@ -424,30 +396,30 @@ class CrawlerM extends Thread {
 			
 			BasicDBObject comment = new BasicDBObject();
 			
-			String commentID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("comments/default/","");
-			comment.put("commentID", commentID);
+			//String commentID = entry.getSelfLink().getHref().replace("http://www.blogger.com/feeds/","").replace("comments/default/","");
+			//comment.put("commentID", commentID);
 			
 			String authorID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
-			comment.put("authorID", authorID);
+			//comment.put("authorID", authorID);
 
-			try {
-				myStm.executeUpdate("INSERT INTO author SET profileID = '" + authorID + "'");
-			} catch (Exception e) { }
+			//try {
+			//	myStm.executeUpdate("INSERT INTO author SET profileID = '" + authorID + "'");
+			//} catch (Exception e) { }
 
-			Date published = new Date(entry.getPublished().getValue());
-			comment.put("published", published);
+			//Date published = new Date(entry.getPublished().getValue());
+			//comment.put("published", published);
 			
-			String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
-			content = content.replaceAll("[^\\p{ASCII}]", "");
-			comment.put("content", content);
+			//String content = Normalizer.normalize(((TextContent) entry.getContent()).getContent().getPlainText(), Normalizer.Form.NFD);
+			//content = content.replaceAll("[^\\p{ASCII}]", "");
+			//comment.put("content", content);
 			
-			comments.put(comments.size(),comment);
+			comments.put(comments.size(),authorID);
 	
 			post.append("comments", comments);
 		
 			collPosts.save(post);
 		}
-	
+
 	}
 
 }
