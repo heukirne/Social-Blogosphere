@@ -304,36 +304,6 @@ class CrawlerM extends Thread {
 		return true;
 	}
 	
-	private void getComments(final String postUri) throws Exception {
-
-		URL feedUrl = new URL("http://www.blogger.com/feeds/" + postUri + "/comments/default");
-		Query myQuery = new Query(feedUrl);
-		myQuery.setStartIndex(1);
-		myQuery.setMaxResults(25);
-		Feed resultFeed = feedQuery(myQuery);
-
-		int count = 1;
-		int size = resultFeed.getTotalResults();
-		do {
-			
-			myQuery.setStartIndex(count);
-			if (count>1) resultFeed = feedQuery(myQuery);
-
-			for (Entry entry : resultFeed.getEntries())
-			{
-				if (entry.getAuthors().get(0).getUri()!=null) {
-					//String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
-					//if (profileID.matches("\\d+")) {
-						setMongoComment(postUri, entry);
-					//}
-				}
-				count++; 
-			}
-
-		} while (count < size);
-
-	}
-	
 	private void setMongoPost(Entry entry) throws Exception {
 		
 		BasicDBObject doc = new BasicDBObject();
@@ -376,6 +346,36 @@ class CrawlerM extends Thread {
 			getComments(blogID+"/"+postID);
 		}
 		
+	}
+	
+	private void getComments(final String postUri) throws Exception {
+
+		URL feedUrl = new URL("http://www.blogger.com/feeds/" + postUri + "/comments/default");
+		Query myQuery = new Query(feedUrl);
+		myQuery.setStartIndex(1);
+		myQuery.setMaxResults(25);
+		Feed resultFeed = feedQuery(myQuery);
+
+		int count = 1;
+		int size = resultFeed.getTotalResults();
+		do {
+			
+			myQuery.setStartIndex(count);
+			if (count>1) resultFeed = feedQuery(myQuery);
+
+			for (Entry entry : resultFeed.getEntries())
+			{
+				if (entry.getAuthors().get(0).getUri()!=null) {
+					//String profileID = entry.getAuthors().get(0).getUri().replace("http://www.blogger.com/profile/","");
+					//if (profileID.matches("\\d+")) {
+						setMongoComment(postUri, entry);
+					//}
+				}
+				count++; 
+			}
+
+		} while (count < size);
+
 	}
 	
 	private void setMongoComment(String postUri, Entry entry) {
