@@ -30,7 +30,7 @@ public class MongoIterate {
 	public static String myConnString = "jdbc:mysql://localhost/bloganalysis?user=&password=";
 	public static final int mongoPort = 27017;
 	public static String mongoHost = "localhost";
-	public static final int numCrawler = 2;
+	public static final int numCrawler = 10;
 	public static Mongo mongoConn;
 	public static DB mongoDb;
 	public static DBCollection collPosts;
@@ -377,7 +377,7 @@ class CrawlerM extends Thread {
 		} while (count < size);
 
 	}
-	
+
 	private void setMongoComment(String postUri, Entry entry) {
 
 		BasicDBObject doc = new BasicDBObject();
