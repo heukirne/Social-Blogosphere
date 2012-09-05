@@ -295,7 +295,6 @@ class CrawlerM extends Thread {
 				}
 				if (entry.getAuthors().get(0).getUri()!=null) {
 					setMongoPost(entry);
-					getComments(postID);
 				}
 				count++; 
 			}
@@ -335,7 +334,7 @@ class CrawlerM extends Thread {
 
 	}
 	
-	private void setMongoPost(Entry entry) {
+	private void setMongoPost(Entry entry) throws Exception {
 		
 		BasicDBObject doc = new BasicDBObject();
 
@@ -374,6 +373,7 @@ class CrawlerM extends Thread {
 			doc.put("comments", new BasicDBList());
 
 			collPosts.insert(doc);
+			getComments(postID);
 		}
 		
 	}
