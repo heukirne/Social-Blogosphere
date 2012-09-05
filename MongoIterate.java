@@ -373,7 +373,7 @@ class CrawlerM extends Thread {
 			doc.put("comments", new BasicDBList());
 
 			collPosts.insert(doc);
-			getComments(postID);
+			getComments(blogID+"/"+postID);
 		}
 		
 	}
