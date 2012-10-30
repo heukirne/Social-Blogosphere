@@ -57,9 +57,9 @@ myConnString = configFile.getProperty("MYCONN");
 	String mapAuthor =	"function(){ " +
 					"  idAuthor = this.authorID;"+
 					"  emit ( this.authorID, { post:1, comment:0, outL:[] } );"+
-					"  this.comments.forEach ( function (comment) { "+
-					"      if (comment.authorID!=idAuthor) {" +
-					"         emit ( comment.authorID , { post:0, comment:1 , outL:[ idAuthor ] } ); " +
+					"  this.comments.forEach ( function (commentID) { "+
+					"      if (commentID!=idAuthor) {" +
+					"         emit ( commentID , { post:0, comment:1 , outL:[ idAuthor ] } ); " +
 					"      }"+
 					"  } ); "+
 					"}; ";								
@@ -67,33 +67,23 @@ myConnString = configFile.getProperty("MYCONN");
         String reduceAuthor = "function( key , values ){ "+
 					"	var result = { post:0, comment:0, outL:[] }; " +
 					"	values.forEach(function(value) {"+
-					"	   var bSet = false;"+
 					"	   result.post += value.post;"+
 					"          result.comment += value.comment;"+
-					"	   /*value.outL.forEach(function(iV){"+
-					"		result.outL.forEach(function(iR){"+
-					"		   if (iV[0]==iR[0]) { "+
-					"		      iR[1]+=iV[1]; bSet = true;"+
-					"		   }"+
-					"		});"+
-					"	   });"+
-					"	   if (!bSet)*/ result.outL = result.outL.concat(value.outL); "+
+					"	   value.outL.forEach(function(a){if(!Array.contains(result.outL,a)){result.outL.push(a);}})"+ 
 					"       }); " +
 					"	return result; "+
 					"};";	
 							
 
-	/** ### Generate PageRank Table ### /
+	/** ### Generate PageRank Table ### */
 
 	collPosts = mongoDb.getCollection("posts");
 	QueryBuilder query = new QueryBuilder();
-	//DBObject docQuery = query.start("tags").is(collName).get();
-	DBObject docQuery = query.start("numComments").greaterThan(0).get();
-	//docQuery = query.start("tags").is("politica").and("authorID").is("15379833583638166492").get();
-	//String fiat = "siena|fiat 500|novo uno|stilo|mille|doblo|abs|airbag|seguro|estabilidade|freio|compacto|estilo|dianteira|roda|cores|liga leve|farol|pintura|calotas|acabamente|espaco|painel|volante|bancos|porta-malas|ar-condicionado|som|cabine|confortavel|preco|caro|custo|manutencao|garantia|revenda|motor|cambio|automatico|potencia|torque|manual|turbo|velocidade|suspensao|tracao|transmissao|forte|mecanica|rapido|fraco|potente|aceleracao|giros|rotacoes|performance|gasolina|litros|combustivel|alcool|economico|beberrao";
-	//docQuery = query.start("content").is(Pattern.compile(fiat,Pattern.CASE_INSENSITIVE)).get();
-	//docQuery = query.start("content").is(Pattern.compile(fiat,Pattern.CASE_INSENSITIVE)).and("authorID").is("15379833583638166492").get();
-    	MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_"+collName, MapReduceCommand.OutputType.REPLACE ,docQuery);
+	DBObject or1Q = query.start("listTag").is(collName).get();
+	DBObject or2Q = query.start("tags").is(collName).get();
+	DBObject docQuery = query.or(or1Q).or(or2Q).get();
+    	MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_"+collName, MapReduceCommand.OutputType.REPLACE ,or2Q);
+	System.out.println("Map/Reduce Authors");
 	/**/
 
 	/** ### Populate global author info and Initial PR ### /
@@ -130,10 +120,14 @@ myConnString = configFile.getProperty("MYCONN");
         }
 	/**/
 
+
+DBCollection collResultP = mongoDb.getCollection("pageRank_"+collName);
+long nTotal = collResultP.getCount();
+
         String mapAuthor2 ="function(){ " +
                            "    var prP = this.Tpost ? (this.value.post*this.value.post)/this.Tpost : 0;"+
 			   "	var prC = this.Tcomment ? (this.value.comment*this.value.comment)/this.Tcomment : 0;"+
-			   "    var prK = (prP+prC)/this.value.outL.length;"+
+			   "    var prK = (1/"+nTotal+")/this.value.outL.length;"+
                            "    this.value.outL.forEach ( function (value) { "+
                            "        emit ( value , { pr:prK , outL:[], prOld:0 } ); " +
                            "    } ); "+
@@ -142,11 +136,11 @@ myConnString = configFile.getProperty("MYCONN");
 
 
        String mapAuthor3 =     "function(){ " +
-                               "       var prK = this.value.pr/this.value.outL.length;"+
+                               "       var prK = ((1-0.85)/"+nTotal+")+((0.85*this.value.pr)/this.value.outL.length);"+
                                "       this.value.outL.forEach ( function (value) { "+
                                "               emit ( value , { pr:prK , outL:[] , prOld: 0 } ); " +
                                "       } ); "+
-                               "       if (this.value.outL.length + prK > 0) { emit ( this._id , { pr: 0 , outL: this.value.outL , prOld: this.value.pr } ); }" +
+                               "       if (prK > 0) { emit ( this._id , { pr: 0 , outL: this.value.outL , prOld: this.value.pr } ); }" +
                                "}; ";
 
         String reduceAuthor2 = "function( key , values ){ "+
@@ -161,10 +155,9 @@ myConnString = configFile.getProperty("MYCONN");
 
 	/** ### Execute PageRank Iteration ### */	
 
-	DBCollection collResultP = mongoDb.getCollection("pageRank_"+collName);
     	MapReduceOutput output2 = collResultP.mapReduce(mapAuthor2, reduceAuthor2, "pageRank_2"+collName, MapReduceCommand.OutputType.REPLACE, null);
 	DBCollection collResult2 = mongoDb.getCollection("pageRank_2"+collName);
-	//MapReduceOutput output2;
+	System.out.println("First PageRank");
 
 	BasicDBObject sortDocP = new BasicDBObject();
         sortDocP.put("value.pr", -1);
@@ -175,10 +168,10 @@ myConnString = configFile.getProperty("MYCONN");
 		output2 = collResult2.mapReduce(mapAuthor3, reduceAuthor2, "pageRank_2"+collName, MapReduceCommand.OutputType.REPLACE, null);
 		collResult2 = output2.getOutputCollection();
 
-	        curP = collResult2.find().sort(sortDocP).limit(100);
+	        curP = collResult2.find();
 	        mse = checkSum(curP);
 
-	        if (mse < 10d) break;
+	        if (mse < 0.000001d) break;
 		//System.out.print(".");
 	}
 	System.out.println("PR-Done");
@@ -263,14 +256,10 @@ myConnString = configFile.getProperty("MYCONN");
 	double r2 = 0;
         while(cur.hasNext()) {
     		DBObject obj = cur.next();
-    		/*for(char num: obj.get("_id").toString().toCharArray() ) 
-    			sum += Character.getNumericValue(num);
-    		*/
-		r1 = ((BasicDBObject)obj.get("value")).getDouble("pr");
-		r2 = ((BasicDBObject)obj.get("value")).getDouble("prOld"); 
-		mEr += Math.sqrt(Math.pow(r1-r2,2)); 
+		r1 += ((BasicDBObject)obj.get("value")).getDouble("pr");
+		r2 += ((BasicDBObject)obj.get("value")).getDouble("prOld"); 
 	}
-	mEr = mEr/100;	
+	mEr =  Math.sqrt(Math.pow(r1-r2,2))/cur.count();	
     	System.out.println(mEr);
     	return mEr;
     }
