@@ -56,10 +56,10 @@ myConnString = configFile.getProperty("MYCONN");
 	
 	String mapAuthor =	"function(){ " +
 					"  idAuthor = this.authorID;"+
-					"  emit ( this.authorID, { post:1, comment:0, outL:[] } );"+
+					"  emit ( this.authorID, { post:1, comment:this.comments.length, outL:[] } );"+
 					"  this.comments.forEach ( function (commentID) { "+
 					"      if (commentID!=idAuthor) {" +
-					"         emit ( commentID , { post:0, comment:1 , outL:[ idAuthor ] } ); " +
+					"         emit ( commentID , { post:0, comment:0 , outL:[ idAuthor ] } ); " +
 					"      }"+
 					"  } ); "+
 					"}; ";								
@@ -82,7 +82,7 @@ myConnString = configFile.getProperty("MYCONN");
 	DBObject or1Q = query.start("listTag").is(collName).get();
 	DBObject or2Q = query.start("tags").is(collName).get();
 	DBObject docQuery = query.or(or1Q).or(or2Q).get();
-    	MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_"+collName, MapReduceCommand.OutputType.REPLACE ,or2Q);
+    	MapReduceOutput output = collPosts.mapReduce(mapAuthor, reduceAuthor, "pageRank_"+collName, MapReduceCommand.OutputType.REPLACE, or2Q);
 	System.out.println("Map/Reduce Authors");
 	/**/
 
